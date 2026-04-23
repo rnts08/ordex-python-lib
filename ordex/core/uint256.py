@@ -75,6 +75,11 @@ class Uint256:
     def get_compact(self) -> int:
         """Encode as the nBits compact representation."""
         bn = self._value
+        
+        # Handle zero explicitly - compact representation of 0 is (0 << 24) | 0
+        if bn == 0:
+            return 0
+        
         size = 0
         # Determine byte-length
         tmp = bn

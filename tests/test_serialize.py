@@ -98,6 +98,21 @@ class TestUint256:
             val2 = Uint256.from_compact(rt)
             assert val == val2
 
+    def test_get_compact_zero(self):
+        """Test that zero produces valid compact encoding that roundtrips."""
+        u = Uint256(0)
+        compact = u.get_compact()
+        assert compact == 0
+        # Verify roundtrip
+        u2 = Uint256.from_compact(compact)
+        assert u == u2
+
+    def test_from_compact_zero(self):
+        """Test that compact 0 decodes to zero target."""
+        u = Uint256.from_compact(0)
+        assert u == Uint256(0)
+        assert u._value == 0
+
     def test_bytes_roundtrip(self):
         original = Uint256(0xDEADBEEF)
         data = original.to_bytes_le()
