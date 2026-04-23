@@ -132,5 +132,8 @@ class TestAddressGeneration:
     def test_generate_keypair_oxg(self):
         params = oxg_mainnet()
         kp = generate_keypair(params)
-        assert kp["p2pkh"][0] == "G"
+        # Verify version byte is correct (39 for OXG mainnet)
+        from ordex.core.base58 import b58check_decode
+        ver, payload = b58check_decode(kp["p2pkh"])
+        assert ver == bytes([39])
         assert kp["p2wpkh"].startswith("oxg1")
