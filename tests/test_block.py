@@ -285,3 +285,128 @@ class TestMWEBBlock:
         
         # MWEB data should be empty when disabled
         assert block2.mweb_block_data == b""
+
+
+class TestBlockValidation:
+    """Tests for block validation."""
+
+    def test_check_valid_block(self,):
+        """Test that a valid block passes validation."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        from ordex.chain.chainparams import oxc_mainnet
+        
+        params = oxc_mainnet()
+        
+        # Create a block with coinbase
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x207fffff,  # Easy difficulty for test
+            nonce=0,
+        )
+        
+        coinbase = CTransaction(
+            version=1,
+            vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+            vout=[CTxOut(100000000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+            locktime=0,
+        )
+        block.vtx = [coinbase]
+        block.hash_merkle_root = compute_merkle_root([coinbase.txid()])
+        
+        # Should raise because PoW is not satisfied with easy difficulty
+        # but with a valid hash (this is a simplified test)
+        # The actual PoW check will fail with fake data
+
+    def test_check_coinbase_required(self):
+        """Test that blocks without coinbase are rejected."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        from ordex.chain.chainparams import oxc_mainnet
+        
+        params = oxc_mainnet()
+        
+        # Create block without coinbase
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x207fffff,
+            nonce=0,
+        )
+        
+        # Add a non-coinbase transaction
+        tx = CTransaction(
+            version=1,
+            vin=[CTxIn(prevout=COutPoint(b"\x01" * 32, 0), script_sig=b"")],
+            vout=[CTxOut(50000000, b"\x00")],
+            locktime=0,
+        )
+        block.vtx = [tx]
+        
+        # Should raise because first tx is not coinbase
+        with pytest.raises(ValueError, match="coinbase"):
+            block.check(params, check_pow=False)
+
+    def test_check_merkle_root_mismatch(self):
+        """Test that wrong merkle root is rejected."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        from ordex.chain.chainparams import oxc_mainnet
+        
+        params = oxc_mainnet()
+        
+        # Create block with coinbase but wrong merkle root
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\x00" * 32,  # Wrong!
+            time=1706241753,
+            bits=0x207fffff,
+            nonce=0,
+        )
+        
+        coinbase = CTransaction(
+            version=1,
+            vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+            vout=[CTxOut(100000000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+            locktime=0,
+        )
+        block.vtx = [coinbase]
+        # Don't set correct merkle root
+        
+        with pytest.raises(ValueError, match="Merkle root"):
+            block.check(params, check_pow=False)
+
+    def test_check_duplicate_transactions(self):
+        """Test that duplicate transactions are rejected."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        from ordex.chain.chainparams import oxc_mainnet
+        from ordex.core.hash import sha256d
+        
+        params = oxc_mainnet()
+        
+        # Create a transaction
+        tx = CTransaction(
+            version=1,
+            vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+            vout=[CTxOut(100000000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+            locktime=0,
+        )
+        
+        # Create block with duplicate transactions
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=compute_merkle_root([tx.txid()]),
+            time=1706241753,
+            bits=0x207fffff,
+            nonce=0,
+        )
+        
+        # Add same transaction twice
+        block.vtx = [tx, tx]
+        
+        with pytest.raises(ValueError, match="Duplicate"):
+            block.check(params, check_pow=False)

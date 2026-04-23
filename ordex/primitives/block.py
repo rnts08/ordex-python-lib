@@ -183,6 +183,65 @@ class CBlock(CBlockHeader):
             nonce=self.nonce,
         )
 
+    def check(self, params, check_pow: bool = True) -> bool:
+        """Validate the block.
+        
+        Checks:
+        - First transaction is coinbase
+        - No duplicate transactions
+        - Merkle root matches transactions
+        - PoW (proof of work) - optional, enabled by default
+        
+        Args:
+            params: ChainParams or ConsensusParams
+            check_pow: Whether to validate proof of work (default: True)
+            
+        Returns:
+            True if block is valid
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        from ordex.consensus.pow import check_proof_of_work
+        from ordex.consensus.params import ConsensusParams
+        
+        # Get consensus params
+        if isinstance(params, ConsensusParams):
+            consensus = params
+        else:
+            consensus = params.consensus
+        
+        # Check first transaction is coinbase
+        if not self.vtx or not self.vtx[0].is_coinbase():
+            raise ValueError("First transaction must be coinbase")
+        
+        # Check for duplicate transactions
+        tx_ids = [tx.txid() for tx in self.vtx]
+        if len(tx_ids) != len(set(tx_ids)):
+            raise ValueError("Duplicate transactions in block")
+        
+        # Check merkle root
+        tx_hashes = [tx.txid() for tx in self.vtx]
+        computed_merkle = compute_merkle_root(tx_hashes)
+        if computed_merkle != self.hash_merkle_root:
+            raise ValueError(
+                f"Merkle root mismatch: computed={computed_merkle.hex()}, "
+                f"header={self.hash_merkle_root.hex()}"
+            )
+        
+        # Check PoW (optional - can be disabled for testing)
+        if check_pow:
+            pow_hash = self.get_pow_hash(use_scrypt=consensus.use_scrypt)
+            if not check_proof_of_work(pow_hash, self.bits, consensus):
+                raise ValueError("Proof of work check failed")
+        
+        return True
+
+
+class InvalidBlock(Exception):
+    """Exception raised when block validation fails."""
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Merkle tree computation
