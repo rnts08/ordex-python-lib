@@ -223,7 +223,177 @@ class MsgGetHeaders:
             write_hash256(f, h)
         write_hash256(f, self.hash_stop)
 
+    @classmethod
+    def deserialize(cls, f: BinaryIO) -> "MsgGetHeaders":
+        msg = cls.__new__(cls)
+        msg.version = read_uint32(f)
+        count = read_compact_size(f)
+        msg.block_locator_hashes = [read_hash256(f) for _ in range(count)]
+        msg.hash_stop = read_hash256(f)
+        return msg
+
     def to_bytes(self) -> bytes:
         buf = BytesIO()
         self.serialize(buf)
         return buf.getvalue()
+
+
+class MsgHeaders:
+    """``headers`` message — response to getheaders, contains block headers."""
+
+    __slots__ = ("headers",)
+
+    def __init__(self, headers: Optional[List["CBlockHeader"]] = None) -> None:
+        self.headers = headers or []
+
+    def serialize(self, f: BinaryIO) -> None:
+        write_compact_size(f, len(self.headers))
+        for header in self.headers:
+            header.serialize(f)
+            f.write(b"\x00")  # txn_count = 0 (no transactions in header message)
+
+    @classmethod
+    def deserialize(cls, f: BinaryIO) -> "MsgHeaders":
+        count = read_compact_size(f)
+        from ordex.primitives.block import CBlockHeader
+        headers = []
+        for _ in range(count):
+            headers.append(CBlockHeader.deserialize(f))
+            txn_count = read_compact_size(f)
+        return cls(headers)
+
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        self.serialize(buf)
+        return buf.getvalue()
+
+
+class MsgMerkleBlock:
+    """``merkleblock`` message — filtered block with merkle proofs for SPV.
+
+    Contains a block header plus a partial merkle tree showing which
+    transactions match the bloom filter.
+    """
+
+    __slots__ = ("header", "transaction_count", "hashes", "flags")
+
+    def __init__(
+        self,
+        header: "CBlockHeader" = None,
+        transaction_count: int = 0,
+        hashes: Optional[List[bytes]] = None,
+        flags: bytes = b"",
+    ) -> None:
+        from ordex.primitives.block import CBlockHeader
+        self.header = header or CBlockHeader()
+        self.transaction_count = transaction_count
+        self.hashes = hashes or []
+        self.flags = flags
+
+    def serialize(self, f: BinaryIO) -> None:
+        self.header.serialize(f)
+        write_uint32(f, self.transaction_count)
+        write_compact_size(f, len(self.hashes))
+        for h in self.hashes:
+            write_hash256(f, h)
+        write_compact_size(f, len(self.flags))
+        f.write(self.flags)
+
+    @classmethod
+    def deserialize(cls, f: BinaryIO) -> "MsgMerkleBlock":
+        from ordex.primitives.block import CBlockHeader
+        header = CBlockHeader.deserialize(f)
+        tx_count = read_uint32(f)
+        num_hashes = read_compact_size(f)
+        hashes = [read_hash256(f) for _ in range(num_hashes)]
+        num_flags = read_compact_size(f)
+        flags = f.read(num_flags)
+        return cls(header, tx_count, hashes, flags)
+
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        self.serialize(buf)
+        return buf.getvalue()
+
+
+class CAddress:
+    """Network address (16 bytes IP + 2 bytes port + services)."""
+
+    __slots__ = ("services", "ip", "port", "timestamp")
+
+    def __init__(
+        self,
+        services: int = 0,
+        ip: bytes = b"\x00" * 16,
+        port: int = 0,
+        timestamp: Optional[int] = None,
+    ) -> None:
+        self.services = services
+        self.ip = ip
+        self.port = port
+        self.timestamp = timestamp
+
+    def serialize(self, f: BinaryIO) -> None:
+        if self.timestamp is not None and self.timestamp > 0:
+            write_uint32(f, self.timestamp)
+        write_uint64(f, self.services)
+        f.write(self.ip)
+        f.write(self.port.to_bytes(2, "big"))
+
+    @classmethod
+    def deserialize(cls, f: BinaryIO, has_timestamp: bool = True) -> "CAddress":
+        if has_timestamp:
+            timestamp = read_uint32(f)
+        else:
+            timestamp = None
+        services = read_uint64(f)
+        ip = read_bytes(f, 16)
+        port = int.from_bytes(read_bytes(f, 2), "big")
+        return cls(services, ip, port, timestamp)
+
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        self.serialize(buf)
+        return buf.getvalue()
+
+
+class MsgAddr:
+    """``addr`` message — network addresses."""
+
+    __slots__ = ("addresses",)
+
+    def __init__(self, addresses: Optional[List[CAddress]] = None) -> None:
+        self.addresses = addresses or []
+
+    def serialize(self, f: BinaryIO) -> None:
+        write_compact_size(f, len(self.addresses))
+        for addr in self.addresses:
+            addr.serialize(f)
+
+    @classmethod
+    def deserialize(cls, f: BinaryIO) -> "MsgAddr":
+        count = read_compact_size(f)
+        addresses = [CAddress.deserialize(f) for _ in range(count)]
+        return cls(addresses)
+
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        self.serialize(buf)
+        return buf.getvalue()
+
+
+class MsgMempool:
+    """``mempool`` message — request transaction inventory."""
+
+    def __init__(self) -> None:
+        pass
+
+    def serialize(self, f: BinaryIO) -> None:
+        pass
+
+    @classmethod
+    def deserialize(cls, f: BinaryIO) -> "MsgMempool":
+        return cls()
+
+    def to_bytes(self) -> bytes:
+        return b""
