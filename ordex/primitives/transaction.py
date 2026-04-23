@@ -236,15 +236,24 @@ class CTransaction:
         # MWEB
         mweb_tx_data = b""
         is_hogex = False
+        locktime = 0
         if (flags & 8) and allow_mweb:
-            # Read the MWEB transaction body — store remaining pre-locktime data as opaque
-            # For now, we detect if it's a HogEx by checking if the MWEB data is empty/null
-            # In production, this would parse the MWEB::Tx structure
-            # We read until locktime — this is a simplification
-            mweb_tx_data = b""  # placeholder for opaque MWEB data
-            is_hogex = True  # simplified
-
-        locktime = read_uint32(f)
+            # Read all remaining bytes (MWEB data + locktime)
+            # Format: [mweb_tx_data][locktime: 4 bytes]
+            remaining = f.read()
+            if remaining and len(remaining) >= 4:
+                # Last 4 bytes are locktime, rest is mweb data
+                mweb_tx_data = remaining[:-4]
+                locktime = int.from_bytes(remaining[-4:], "little")
+                is_hogex = len(mweb_tx_data) > 0
+            elif remaining:
+                # Edge case: only locktime, no MWEB data
+                locktime = int.from_bytes(remaining, "little")
+                mweb_tx_data = b""
+                is_hogex = False
+        else:
+            # No MWEB, just read locktime normally
+            locktime = read_uint32(f)
 
         return cls(
             version=version,
