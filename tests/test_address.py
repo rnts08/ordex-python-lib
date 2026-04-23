@@ -228,7 +228,7 @@ class TestAddressDecoding:
         addr = pubkey_to_bech32(pub, params)
         
         result = decode_address(addr)
-        assert result["type"] == "bech32"
+        assert result["type"] == "p2wpkh"
         assert result["hrp"] == "oxc"
         assert result["witness_version"] == 0
         assert result["hash"] == pub.hash160()

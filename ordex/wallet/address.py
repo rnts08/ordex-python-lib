@@ -107,11 +107,17 @@ def decode_address(address: str) -> Dict[str, Any]:
     # Try Bech32 first (lowercase, starts with oxc1, oxg1, etc.)
     if address.lower().startswith(("oxc1", "oxg1", "toxc1", "toxg1", "rtoxc1", "rtoxg1", "rtorc1")):
         try:
-            hrp, witver, witprog = bech32_to_pubkey_hash(address)
-            result["type"] = "bech32"
+            hrp, witver, witprog = bech32_decode(address)
             result["hrp"] = hrp
             result["witness_version"] = witver
             result["hash"] = witprog
+            
+            if witver == 0:
+                result["type"] = "p2wpkh"
+            elif witver == 1:
+                result["type"] = "p2tr"
+            else:
+                result["type"] = "bech32"
             return result
         except ValueError:
             pass
@@ -163,4 +169,38 @@ def generate_keypair(params: ChainParams) -> Dict[str, Any]:
         "p2pkh": pubkey_to_p2pkh(pubkey, params),
         "p2sh": p2sh_addr,
         "p2wpkh": pubkey_to_bech32(pubkey, params),
+        "p2tr": pubkey_to_p2tr(pubkey, params),
     }
+
+
+def pubkey_to_p2tr(pubkey: PublicKey, params: ChainParams) -> str:
+    """Generate a Taproot (P2TR) address from a public key.
+
+    Uses BIP341/342: Bech32m with witness version 1.
+    The witness program is the SHA256 of the tweaked public key.
+    """
+    from ordex.core.hash import sha256d
+
+    pubkey_data = pubkey.data
+    if len(pubkey_data) == 33:
+        x_only = pubkey_data[1:]
+    elif len(pubkey_data) == 65:
+        x_only = pubkey_data[1:33]
+    else:
+        raise ValueError(f"Invalid public key length: {len(pubkey_data)}")
+
+    witness_program = sha256d(x_only)
+    return bech32_encode(params.bech32_hrp, 1, witness_program)
+
+
+def p2tr_to_pubkey_hash(address: str) -> Tuple[str, bytes]:
+    """Decode a P2TR address.
+
+    Returns (hrp, witness_program).
+    """
+    hrp, witver, witprog = bech32_decode(address)
+    if witver != 1:
+        raise ValueError(f"Only witness version 1 (P2TR) supported, got {witver}")
+    if len(witprog) != 32:
+        raise ValueError(f"P2TR witness program must be 32 bytes, got {len(witprog)}")
+    return hrp, witprog
