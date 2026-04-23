@@ -43,12 +43,15 @@
  | <a href="#G"><strong>G</strong></a>
  | <a href="#H"><strong>H</strong></a>
  | <a href="#I"><strong>I</strong></a>
+ | <a href="#L"><strong>L</strong></a>
  | <a href="#M"><strong>M</strong></a>
+ | <a href="#N"><strong>N</strong></a>
  | <a href="#O"><strong>O</strong></a>
  | <a href="#P"><strong>P</strong></a>
  | <a href="#R"><strong>R</strong></a>
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
  | <a href="#V"><strong>V</strong></a>
  | <a href="#W"><strong>W</strong></a>
  
@@ -78,15 +81,17 @@
 </li>
       <li><a href="api.html#ordex.core.base58.bech32_decode">bech32_decode() (in module ordex.core.base58)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#ordex.core.base58.bech32_encode">bech32_encode() (in module ordex.core.base58)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#ordex.wallet.address.bech32_to_pubkey_hash">bech32_to_pubkey_hash() (in module ordex.wallet.address)</a>
 </li>
       <li><a href="api.html#ordex.wallet.hd.BIP32Path">BIP32Path (class in ordex.wallet.hd)</a>
 </li>
       <li><a href="api.html#ordex.consensus.params.BIP9Deployment">BIP9Deployment (class in ordex.consensus.params)</a>
+</li>
+      <li><a href="api.html#ordex.core.uint256.Uint256.bits">bits() (ordex.core.uint256.Uint256 method)</a>
 </li>
       <li><a href="api.html#ordex.net.sync.BlockSynchronizer">BlockSynchronizer (class in ordex.net.sync)</a>
 </li>
@@ -100,9 +105,13 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#ordex.net.messages.CAddress">CAddress (class in ordex.net.messages)</a>
 </li>
+      <li><a href="api.html#ordex.consensus.fee.calculate_fee_from_rate">calculate_fee_from_rate() (in module ordex.consensus.fee)</a>
+</li>
       <li><a href="api.html#ordex.consensus.pow.calculate_next_work_required_bitcoin">calculate_next_work_required_bitcoin() (in module ordex.consensus.pow)</a>
 </li>
       <li><a href="api.html#ordex.consensus.pow.calculate_next_work_required_litecoin">calculate_next_work_required_litecoin() (in module ordex.consensus.pow)</a>
+</li>
+      <li><a href="api.html#ordex.consensus.fee.calculate_vbytes_from_weight">calculate_vbytes_from_weight() (in module ordex.consensus.fee)</a>
 </li>
       <li><a href="api.html#ordex.rpc.client.RpcClient.call">call() (ordex.rpc.client.RpcClient method)</a>
 </li>
@@ -118,11 +127,19 @@
 </li>
       <li><a href="api.html#ordex.consensus.pow.check_proof_of_work">check_proof_of_work() (in module ordex.consensus.pow)</a>
 </li>
+      <li><a href="api.html#ordex.net.protocol.CInv">CInv (class in ordex.net.protocol)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.close">close() (ordex.net.connection.NodeConnection method)</a>
+</li>
       <li><a href="api.html#ordex.net.sync.PeerManager.close_all">close_all() (ordex.net.sync.PeerManager method)</a>
 </li>
+      <li><a href="api.html#ordex.net.protocol.CMessageHeader">CMessageHeader (class in ordex.net.protocol)</a>
+</li>
       <li><a href="api.html#ordex.primitives.block.compute_merkle_root">compute_merkle_root() (in module ordex.primitives.block)</a>
+</li>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.connect">connect() (ordex.net.connection.NodeConnection method)</a>
 </li>
       <li><a href="api.html#ordex.consensus.params.ConsensusParams">ConsensusParams (class in ordex.consensus.params)</a>
 </li>
@@ -180,10 +197,12 @@
 <h2 id="E">E</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#ordex.core.script.ScriptInterpreter.evaluate">evaluate() (ordex.core.script.ScriptInterpreter method)</a>
+      <li><a href="api.html#ordex.consensus.fee.FeeEstimator.estimate_smart_fee">estimate_smart_fee() (ordex.consensus.fee.FeeEstimator method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.core.script.ScriptInterpreter.evaluate">evaluate() (ordex.core.script.ScriptInterpreter method)</a>
+</li>
       <li><a href="api.html#ordex.wallet.hd.ExtendedKey">ExtendedKey (class in ordex.wallet.hd)</a>
 </li>
   </ul></td>
@@ -192,9 +211,15 @@
 <h2 id="F">F</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.consensus.fee.FeeEstimate">FeeEstimate (class in ordex.consensus.fee)</a>
+</li>
+      <li><a href="api.html#ordex.consensus.fee.FeeEstimator">FeeEstimator (class in ordex.consensus.fee)</a>
+</li>
       <li><a href="api.html#ordex.net.sync.ChainState.find_gap">find_gap() (ordex.net.sync.ChainState method)</a>
 </li>
       <li><a href="api.html#ordex.wallet.hd.ExtendedKey.fingerprint">fingerprint (ordex.wallet.hd.ExtendedKey property)</a>
+</li>
+      <li><a href="api.html#ordex.consensus.amount.format_money">format_money() (in module ordex.consensus.amount)</a>
 </li>
       <li><a href="api.html#ordex.wallet.hd.ExtendedKey.from_base58">from_base58() (ordex.wallet.hd.ExtendedKey class method)</a>
 </li>
@@ -206,11 +231,19 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.core.uint256.Uint256.from_bytes_le">from_bytes_le() (ordex.core.uint256.Uint256 class method)</a>
+</li>
+      <li><a href="api.html#ordex.core.uint256.Uint256.from_compact">from_compact() (ordex.core.uint256.Uint256 class method)</a>
+</li>
       <li><a href="api.html#ordex.wallet.hd.HDWallet.from_extended_key">from_extended_key() (ordex.wallet.hd.HDWallet class method)</a>
+</li>
+      <li><a href="api.html#ordex.core.uint256.Uint256.from_hex">from_hex() (ordex.core.uint256.Uint256 class method)</a>
 </li>
       <li><a href="api.html#ordex.wallet.hd.HDWallet.from_mnemonic">from_mnemonic() (ordex.wallet.hd.HDWallet class method)</a>
 </li>
       <li><a href="api.html#ordex.core.script.CScript.from_ops">from_ops() (ordex.core.script.CScript class method)</a>
+</li>
+      <li><a href="api.html#ordex.net.protocol.CMessageHeader.from_payload">from_payload() (ordex.net.protocol.CMessageHeader class method)</a>
 </li>
       <li><a href="api.html#ordex.core.key.PublicKey.from_point">from_point() (ordex.core.key.PublicKey class method)</a>
 </li>
@@ -236,6 +269,10 @@
 </li>
       <li><a href="api.html#ordex.wallet.hd.HDWallet.get_change_addresses">get_change_addresses() (ordex.wallet.hd.HDWallet method)</a>
 </li>
+      <li><a href="api.html#ordex.core.uint256.Uint256.get_compact">get_compact() (ordex.core.uint256.Uint256 method)</a>
+</li>
+      <li><a href="api.html#ordex.consensus.fee.FeeEstimator.get_fee_for_transaction">get_fee_for_transaction() (ordex.consensus.fee.FeeEstimator method)</a>
+</li>
       <li><a href="api.html#ordex.primitives.block.CBlockHeader.get_hash">get_hash() (ordex.primitives.block.CBlockHeader method)</a>
 </li>
   </ul></td>
@@ -243,6 +280,8 @@
       <li><a href="api.html#ordex.primitives.block.CBlockHeader.get_hash_hex">get_hash_hex() (ordex.primitives.block.CBlockHeader method)</a>
 </li>
       <li><a href="api.html#ordex.net.sync.ChainState.get_locator">get_locator() (ordex.net.sync.ChainState method)</a>
+</li>
+      <li><a href="api.html#ordex.consensus.fee.FeeEstimator.get_minimum_fee">get_minimum_fee() (ordex.consensus.fee.FeeEstimator method)</a>
 </li>
       <li><a href="api.html#ordex.core.script.CScript.get_p2pkh_hash">get_p2pkh_hash() (ordex.core.script.CScript method)</a>
 </li>
@@ -262,6 +301,8 @@
 <h2 id="H">H</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.handshake">handshake() (ordex.net.connection.NodeConnection method)</a>
+</li>
       <li><a href="api.html#ordex.core.hash.hash160">hash160() (in module ordex.core.hash)</a>
 
       <ul>
@@ -280,6 +321,8 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#ordex.primitives.block.InvalidBlock">InvalidBlock</a>
 </li>
+      <li><a href="api.html#ordex.net.protocol.InvType">InvType (class in ordex.net.protocol)</a>
+</li>
       <li><a href="api.html#ordex.core.script.CScript.is_p2pkh">is_p2pkh() (ordex.core.script.CScript method)</a>
 </li>
       <li><a href="api.html#ordex.core.script.CScript.is_p2sh">is_p2sh() (ordex.core.script.CScript method)</a>
@@ -297,6 +340,14 @@
   </ul></td>
 </tr></table>
 
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.listen">listen() (ordex.net.connection.NodeConnection method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -309,6 +360,10 @@
 
       <ul>
         <li><a href="api.html#module-ordex.chain.chainparams">ordex.chain.chainparams</a>
+</li>
+        <li><a href="api.html#module-ordex.consensus.amount">ordex.consensus.amount</a>
+</li>
+        <li><a href="api.html#module-ordex.consensus.fee">ordex.consensus.fee</a>
 </li>
         <li><a href="api.html#module-ordex.consensus.params">ordex.consensus.params</a>
 </li>
@@ -324,7 +379,13 @@
 </li>
         <li><a href="api.html#module-ordex.core.serialize">ordex.core.serialize</a>
 </li>
+        <li><a href="api.html#module-ordex.core.uint256">ordex.core.uint256</a>
+</li>
+        <li><a href="api.html#module-ordex.net.connection">ordex.net.connection</a>
+</li>
         <li><a href="api.html#module-ordex.net.messages">ordex.net.messages</a>
+</li>
+        <li><a href="api.html#module-ordex.net.protocol">ordex.net.protocol</a>
 </li>
         <li><a href="api.html#module-ordex.net.sync">ordex.net.sync</a>
 </li>
@@ -345,6 +406,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.consensus.amount.money_range">money_range() (in module ordex.consensus.amount)</a>
+</li>
       <li><a href="api.html#ordex.net.messages.MsgAddr">MsgAddr (class in ordex.net.messages)</a>
 </li>
       <li><a href="api.html#ordex.net.messages.MsgGetData">MsgGetData (class in ordex.net.messages)</a>
@@ -368,6 +431,14 @@
   </ul></td>
 </tr></table>
 
+<h2 id="N">N</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.net.connection.NodeConnection">NodeConnection (class in ordex.net.connection)</a>
+</li>
+  </ul></td>
+</tr></table>
+
 <h2 id="O">O</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -378,6 +449,20 @@
 
       <ul>
         <li><a href="api.html#module-ordex.chain.chainparams">module</a>
+</li>
+      </ul></li>
+      <li>
+    ordex.consensus.amount
+
+      <ul>
+        <li><a href="api.html#module-ordex.consensus.amount">module</a>
+</li>
+      </ul></li>
+      <li>
+    ordex.consensus.fee
+
+      <ul>
+        <li><a href="api.html#module-ordex.consensus.fee">module</a>
 </li>
       </ul></li>
       <li>
@@ -430,10 +515,33 @@
 </li>
       </ul></li>
       <li>
+    ordex.core.uint256
+
+      <ul>
+        <li><a href="api.html#module-ordex.core.uint256">module</a>
+</li>
+      </ul></li>
+      <li>
+    ordex.net.connection
+
+      <ul>
+        <li><a href="api.html#module-ordex.net.connection">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
     ordex.net.messages
 
       <ul>
         <li><a href="api.html#module-ordex.net.messages">module</a>
+</li>
+      </ul></li>
+      <li>
+    ordex.net.protocol
+
+      <ul>
+        <li><a href="api.html#module-ordex.net.protocol">module</a>
 </li>
       </ul></li>
       <li>
@@ -443,8 +551,6 @@
         <li><a href="api.html#module-ordex.net.sync">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     ordex.primitives.block
 
@@ -526,6 +632,8 @@
 </li>
       <li><a href="api.html#ordex.core.script.CScript.p2wsh">p2wsh() (ordex.core.script.CScript class method)</a>
 </li>
+      <li><a href="api.html#ordex.consensus.amount.parse_money">parse_money() (in module ordex.consensus.amount)</a>
+</li>
       <li><a href="api.html#ordex.net.sync.PeerManager">PeerManager (class in ordex.net.sync)</a>
 </li>
   </ul></td>
@@ -564,9 +672,13 @@
 </li>
       <li><a href="api.html#ordex.core.serialize.read_string">read_string() (in module ordex.core.serialize)</a>
 </li>
+      <li><a href="api.html#ordex.core.serialize.read_vector">read_vector() (in module ordex.core.serialize)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#ordex.core.serialize.read_vector">read_vector() (in module ordex.core.serialize)</a>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.recv_message">recv_message() (ordex.net.connection.NodeConnection method)</a>
+</li>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.register_handler">register_handler() (ordex.net.connection.NodeConnection method)</a>
 </li>
       <li><a href="api.html#ordex.net.sync.BlockSynchronizer.request_block">request_block() (ordex.net.sync.BlockSynchronizer method)</a>
 </li>
@@ -592,8 +704,12 @@
 </li>
       <li><a href="api.html#ordex.core.key.PrivateKey.secret">secret (ordex.core.key.PrivateKey property)</a>
 </li>
+      <li><a href="api.html#ordex.net.connection.NodeConnection.send_message">send_message() (ordex.net.connection.NodeConnection method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.net.protocol.ServiceFlags">ServiceFlags (class in ordex.net.protocol)</a>
+</li>
       <li><a href="api.html#ordex.core.hash.sha256">sha256() (in module ordex.core.hash)</a>
 </li>
       <li><a href="api.html#ordex.core.hash.sha256d">sha256d() (in module ordex.core.hash)</a>
@@ -618,8 +734,12 @@
         <li><a href="api.html#ordex.primitives.block.CBlock.to_bytes">(ordex.primitives.block.CBlock method)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#ordex.core.uint256.Uint256.to_bytes_le">to_bytes_le() (ordex.core.uint256.Uint256 method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.core.uint256.Uint256.to_hex">to_hex() (ordex.core.uint256.Uint256 method)</a>
+</li>
       <li><a href="api.html#ordex.core.key.PrivateKey.to_wif">to_wif() (ordex.core.key.PrivateKey method)</a>
 </li>
       <li><a href="api.html#ordex.wallet.signing.TransactionSignature">TransactionSignature (class in ordex.wallet.signing)</a>
@@ -631,15 +751,25 @@
   </ul></td>
 </tr></table>
 
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.core.uint256.Uint256">Uint256 (class in ordex.core.uint256)</a>
+</li>
+  </ul></td>
+</tr></table>
+
 <h2 id="V">V</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#ordex.core.script.ScriptInterpreter.verify_p2pkh">verify_p2pkh() (ordex.core.script.ScriptInterpreter method)</a>
+      <li><a href="api.html#ordex.net.protocol.CMessageHeader.verify_checksum">verify_checksum() (ordex.net.protocol.CMessageHeader method)</a>
 </li>
-      <li><a href="api.html#ordex.core.script.ScriptInterpreter.verify_p2sh">verify_p2sh() (ordex.core.script.ScriptInterpreter method)</a>
+      <li><a href="api.html#ordex.core.script.ScriptInterpreter.verify_p2pkh">verify_p2pkh() (ordex.core.script.ScriptInterpreter method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#ordex.core.script.ScriptInterpreter.verify_p2sh">verify_p2sh() (ordex.core.script.ScriptInterpreter method)</a>
+</li>
       <li><a href="api.html#ordex.core.script.ScriptInterpreter.verify_p2wpkh">verify_p2wpkh() (ordex.core.script.ScriptInterpreter method)</a>
 </li>
       <li><a href="api.html#ordex.core.script.verify_script">verify_script() (in module ordex.core.script)</a>

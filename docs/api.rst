@@ -24,6 +24,9 @@ Core Bitcoin primitives.
 .. automodule:: ordex.core.serialize
    :members:
 
+.. automodule:: ordex.core.uint256
+   :members:
+
 Wallet Modules
 -------------
 
@@ -67,6 +70,12 @@ Blockchain and consensus.
 .. automodule:: ordex.consensus.pow
    :members:
 
+.. automodule:: ordex.consensus.fee
+   :members:
+
+.. automodule:: ordex.consensus.amount
+   :members:
+
 Network Modules
 ---------------
 
@@ -79,6 +88,12 @@ P2P networking and RPC.
    :members:
 
 .. automodule:: ordex.net.sync
+   :members:
+
+.. automodule:: ordex.net.connection
+   :members:
+
+.. automodule:: ordex.net.protocol
    :members:
 
 .. automodule:: ordex.rpc.client

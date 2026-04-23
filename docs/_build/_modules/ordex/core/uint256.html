@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.core.uint256 &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.core.uint256</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">256-bit unsigned integer type for block hashes, proof-of-work targets, etc.</span>
+
+<span class="sd">Mirrors Bitcoin Core&#39;s arith_uint256 / uint256 types.  The internal</span>
+<span class="sd">representation is a Python ``int`` (arbitrary precision), but all</span>
+<span class="sd">serialization is 32-byte little-endian.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+
+<div class="viewcode-block" id="Uint256">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256">[docs]</a>
+<span class="k">class</span> <span class="nc">Uint256</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Immutable 256-bit unsigned integer.&quot;&quot;&quot;</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;_value&quot;</span><span class="p">,)</span>
+
+    <span class="n">MAX</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">256</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">value</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Uint256 out of range: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="c1"># -- Constructors -------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Uint256.from_bytes_le">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.from_bytes_le">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_bytes_le</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from 32-byte little-endian representation.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">32</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected 32 bytes, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;little&quot;</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="Uint256.from_hex">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.from_hex">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_hex</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">hex_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from a hex string (big-endian, like block hashes are displayed).&quot;&quot;&quot;</span>
+        <span class="n">hex_str</span> <span class="o">=</span> <span class="n">hex_str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">hex_str</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;0x&quot;</span><span class="p">):</span>
+            <span class="n">hex_str</span> <span class="o">=</span> <span class="n">hex_str</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+        <span class="n">hex_str</span> <span class="o">=</span> <span class="n">hex_str</span><span class="o">.</span><span class="n">zfill</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">hex_str</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="Uint256.from_compact">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.from_compact">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_compact</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">compact</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decode the nBits compact representation into a full 256-bit target.</span>
+
+<span class="sd">        Format: the top byte is the number of bytes (exponent), and the lower</span>
+<span class="sd">        3 bytes are the mantissa. Negative flag is the MSB of the mantissa.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">compact</span> <span class="o">&gt;&gt;</span> <span class="mi">24</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFF</span>
+        <span class="n">negative</span> <span class="o">=</span> <span class="p">(</span><span class="n">compact</span> <span class="o">&gt;&gt;</span> <span class="mi">23</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span>
+        <span class="n">mantissa</span> <span class="o">=</span> <span class="n">compact</span> <span class="o">&amp;</span> <span class="mh">0x7FFFFF</span>
+
+        <span class="k">if</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">mantissa</span> <span class="o">&gt;&gt;=</span> <span class="mi">8</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="o">-</span> <span class="n">size</span><span class="p">)</span>
+            <span class="n">word</span> <span class="o">=</span> <span class="n">mantissa</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">word</span> <span class="o">=</span> <span class="n">mantissa</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="mi">3</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">negative</span> <span class="ow">and</span> <span class="n">word</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># negative targets treated as zero</span>
+
+        <span class="n">word</span> <span class="o">&amp;=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">MAX</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">word</span><span class="p">)</span></div>
+
+
+    <span class="c1"># -- Serialization ------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Uint256.to_bytes_le">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.to_bytes_le">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_bytes_le</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the 32-byte little-endian representation.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="s2">&quot;little&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Uint256.to_hex">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.to_hex">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_hex</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the big-endian hex string (like block hash display).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span><span class="si">:</span><span class="s2">064x</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+<div class="viewcode-block" id="Uint256.get_compact">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.get_compact">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_compact</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Encode as the nBits compact representation.&quot;&quot;&quot;</span>
+        <span class="n">bn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span>
+        
+        <span class="c1"># Handle zero explicitly - compact representation of 0 is (0 &lt;&lt; 24) | 0</span>
+        <span class="k">if</span> <span class="n">bn</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        
+        <span class="n">size</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># Determine byte-length</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="n">bn</span>
+        <span class="k">while</span> <span class="n">tmp</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">tmp</span> <span class="o">&gt;&gt;=</span> <span class="mi">8</span>
+            <span class="n">size</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">compact</span> <span class="o">=</span> <span class="p">(</span><span class="n">bn</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFF</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="o">-</span> <span class="n">size</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">compact</span> <span class="o">=</span> <span class="p">(</span><span class="n">bn</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="mi">8</span> <span class="o">*</span> <span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)))</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFF</span>
+
+        <span class="c1"># Avoid setting the sign bit</span>
+        <span class="k">if</span> <span class="n">compact</span> <span class="o">&amp;</span> <span class="mh">0x800000</span><span class="p">:</span>
+            <span class="n">compact</span> <span class="o">&gt;&gt;=</span> <span class="mi">8</span>
+            <span class="n">size</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">size</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">)</span> <span class="o">|</span> <span class="n">compact</span></div>
+
+
+    <span class="c1"># -- Bit operations (for OXG overflow fix) ------------------------------</span>
+
+<div class="viewcode-block" id="Uint256.bits">
+<a class="viewcode-back" href="../../../api.html#ordex.core.uint256.Uint256.bits">[docs]</a>
+    <span class="k">def</span> <span class="nf">bits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the position of the highest set bit (1-indexed), or 0.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__rshift__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&gt;&gt;</span> <span class="n">n</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__lshift__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&lt;&lt;</span> <span class="n">n</span><span class="p">)</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span>
+
+    <span class="c1"># -- Arithmetic ---------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="fm">__mul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">):</span>
+            <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">*</span> <span class="n">other</span><span class="p">)</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rmul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__mul__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__floordiv__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">):</span>
+            <span class="n">other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">//</span> <span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__truediv__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__floordiv__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">+</span> <span class="n">ov</span><span class="p">)</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__sub__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Subtract another value. Result wraps around (unsigned).&quot;&quot;&quot;</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="n">Uint256</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">-</span> <span class="n">ov</span><span class="p">)</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span>
+
+    <span class="c1"># -- Comparison ---------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">==</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span> <span class="fm">__ne__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__eq__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&lt;</span> <span class="n">ov</span>
+
+    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&lt;=</span> <span class="n">ov</span>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&gt;</span> <span class="n">ov</span>
+
+    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;Uint256&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">ov</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Uint256</span><span class="p">)</span> <span class="k">else</span> <span class="n">other</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">&gt;=</span> <span class="n">ov</span>
+
+    <span class="k">def</span> <span class="fm">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__int__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span>
+
+    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value</span> <span class="o">!=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Uint256(0x</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">to_hex</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_hex</span><span class="p">()</span></div>
+
+
+
+<span class="c1"># Convenience constant</span>
+<span class="n">UINT256_ZERO</span> <span class="o">=</span> <span class="n">Uint256</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

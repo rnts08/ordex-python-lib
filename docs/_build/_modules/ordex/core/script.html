@@ -389,7 +389,7 @@
                         <span class="n">pubkey</span> <span class="o">=</span> <span class="n">PublicKey</span><span class="p">(</span><span class="n">pubkey_bytes</span><span class="p">)</span>
                         <span class="n">privkey</span> <span class="o">=</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="n">sig_bytes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">sig_bytes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">4</span> <span class="k">else</span> <span class="n">sig_bytes</span><span class="p">)</span>
 
-                        <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sighash_message</span><span class="p">(</span><span class="n">sig_bytes</span><span class="p">)</span>
+                        <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sighash_message</span><span class="p">(</span><span class="n">sig_bytes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">)</span>
                         <span class="n">signature</span> <span class="o">=</span> <span class="n">sig_bytes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
                         <span class="n">privkey</span><span class="o">.</span><span class="n">_key</span><span class="o">.</span><span class="n">sign_digest</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">sigencode</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;big&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">s</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;big&#39;</span><span class="p">))</span>
@@ -541,11 +541,22 @@
             <span class="k">return</span> <span class="kc">False</span></div>
 
 
-    <span class="k">def</span> <span class="nf">_get_sighash_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sig_bytes</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the message hash for signature verification.&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_get_sighash_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sig_bytes</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">script</span><span class="p">:</span> <span class="n">CScript</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the message hash for signature verification.</span>
+
+<span class="sd">        This is a simplified sighash implementation. Full BIP143 support would require</span>
+<span class="sd">        transaction context (nHashType, input index, amounts, etc.)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sig_bytes</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">sha256d</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">sha256d</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;TODO: implement sighash&quot;</span><span class="p">)</span>
+
+        <span class="n">sighash_type</span> <span class="o">=</span> <span class="n">sig_bytes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">sig_bytes</span> <span class="k">else</span> <span class="mh">0x01</span>
+
+        <span class="n">base</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">([</span><span class="n">sighash_type</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">script</span><span class="p">:</span>
+            <span class="n">base</span> <span class="o">+=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">script</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">base</span><span class="p">)</span>
 
 <div class="viewcode-block" id="ScriptInterpreter.verify_p2pkh">
 <a class="viewcode-back" href="../../../api.html#ordex.core.script.ScriptInterpreter.verify_p2pkh">[docs]</a>

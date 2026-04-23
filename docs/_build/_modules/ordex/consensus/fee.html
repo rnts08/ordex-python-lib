@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.consensus.fee &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.consensus.fee</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Fee estimation for transactions.</span>
+
+<span class="sd">Provides local fee estimation based on transaction size and</span>
+<span class="sd">historical fee data when RPC is unavailable.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+
+
+<div class="viewcode-block" id="FeeEstimate">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.FeeEstimate">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">FeeEstimate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fee estimation result.&quot;&quot;&quot;</span>
+    <span class="n">feerate</span><span class="p">:</span> <span class="nb">float</span>  <span class="c1"># satoshis per vbyte</span>
+    <span class="n">estimate</span><span class="p">:</span> <span class="nb">str</span>  <span class="c1"># &quot;conservative&quot;, &quot;economical&quot;, &quot;unreasonable&quot;</span>
+    <span class="n">blocks</span><span class="p">:</span> <span class="nb">int</span>  <span class="c1"># estimated confirmation blocks</span></div>
+
+
+
+<div class="viewcode-block" id="FeeEstimator">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.FeeEstimator">[docs]</a>
+<span class="k">class</span> <span class="nc">FeeEstimator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Local fee estimation based on mempool data and presets.</span>
+
+<span class="sd">    When connected to a node, can use RPC estimates.</span>
+<span class="sd">    When offline, uses preset fee levels.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">DEFAULT_FEES</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;high&quot;</span><span class="p">:</span> <span class="mf">10.0</span><span class="p">,</span>      <span class="c1"># ~10 sat/vbyte, ~10 min confirmation</span>
+        <span class="s2">&quot;medium&quot;</span><span class="p">:</span> <span class="mf">5.0</span><span class="p">,</span>     <span class="c1"># ~5 sat/vbyte, ~30 min confirmation  </span>
+        <span class="s2">&quot;low&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>        <span class="c1"># ~1 sat/vbyte, ~1 hour confirmation</span>
+        <span class="s2">&quot;minimum&quot;</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>    <span class="c1"># ~0.1 sat/vbyte, ~1 day confirmation</span>
+    <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rpc_client</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rpc</span> <span class="o">=</span> <span class="n">rpc_client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_estimates</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">FeeEstimate</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_update</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="FeeEstimator.estimate_smart_fee">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.FeeEstimator.estimate_smart_fee">[docs]</a>
+    <span class="k">def</span> <span class="nf">estimate_smart_fee</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">conf_target</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="n">estimate_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;conservative&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FeeEstimate</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate fees for confirmation within target blocks.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            conf_target: Target number of blocks for confirmation</span>
+<span class="sd">            estimate_mode: &quot;conservative&quot; or &quot;economical&quot;</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            FeeEstimate with feerate in sat/vbyte</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpc</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">estimatesmartfee</span><span class="p">(</span><span class="n">conf_target</span><span class="p">)</span>
+                <span class="n">feerate</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;feerate&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">FeeEstimate</span><span class="p">(</span>
+                    <span class="n">feerate</span><span class="o">=</span><span class="n">feerate</span><span class="p">,</span>
+                    <span class="n">estimate</span><span class="o">=</span><span class="n">estimate_mode</span><span class="p">,</span>
+                    <span class="n">blocks</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;blocks&quot;</span><span class="p">,</span> <span class="n">conf_target</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_local_estimate</span><span class="p">(</span><span class="n">conf_target</span><span class="p">,</span> <span class="n">estimate_mode</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_local_estimate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">conf_target</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">estimate_mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FeeEstimate</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get local fee estimate based on target blocks.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">conf_target</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">feerate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_FEES</span><span class="p">[</span><span class="s2">&quot;high&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">conf_target</span> <span class="o">&lt;=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">feerate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_FEES</span><span class="p">[</span><span class="s2">&quot;medium&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">conf_target</span> <span class="o">&lt;=</span> <span class="mi">10</span><span class="p">:</span>
+            <span class="n">feerate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_FEES</span><span class="p">[</span><span class="s2">&quot;low&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">feerate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_FEES</span><span class="p">[</span><span class="s2">&quot;minimum&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">estimate_mode</span> <span class="o">==</span> <span class="s2">&quot;economical&quot;</span><span class="p">:</span>
+            <span class="n">feerate</span> <span class="o">=</span> <span class="n">feerate</span> <span class="o">*</span> <span class="mf">0.8</span>
+
+        <span class="k">return</span> <span class="n">FeeEstimate</span><span class="p">(</span>
+            <span class="n">feerate</span><span class="o">=</span><span class="n">feerate</span><span class="p">,</span>
+            <span class="n">estimate</span><span class="o">=</span><span class="n">estimate_mode</span><span class="p">,</span>
+            <span class="n">blocks</span><span class="o">=</span><span class="n">conf_target</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="FeeEstimator.get_fee_for_transaction">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.FeeEstimator.get_fee_for_transaction">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_fee_for_transaction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tx_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">conf_target</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate estimated fee for a transaction.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tx_size: Transaction size in bytes</span>
+<span class="sd">            conf_target: Target confirmation blocks</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Fee in satoshis</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">estimate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimate_smart_fee</span><span class="p">(</span><span class="n">conf_target</span><span class="p">)</span>
+        <span class="n">fee_vbytes</span> <span class="o">=</span> <span class="p">(</span><span class="n">tx_size</span> <span class="o">+</span> <span class="mi">3</span><span class="p">)</span> <span class="o">//</span> <span class="mi">4</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">estimate</span><span class="o">.</span><span class="n">feerate</span> <span class="o">*</span> <span class="n">fee_vbytes</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FeeEstimator.get_minimum_fee">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.FeeEstimator.get_minimum_fee">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_minimum_fee</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tx_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the minimum safe fee for a transaction.</span>
+<span class="sd">        </span>
+<span class="sd">        Uses the network&#39;s default minimum relay fee.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">default_min_rate</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">fee_vbytes</span> <span class="o">=</span> <span class="p">(</span><span class="n">tx_size</span> <span class="o">+</span> <span class="mi">3</span><span class="p">)</span> <span class="o">//</span> <span class="mi">4</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">default_min_rate</span> <span class="o">*</span> <span class="n">fee_vbytes</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="calculate_vbytes_from_weight">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.calculate_vbytes_from_weight">[docs]</a>
+<span class="k">def</span> <span class="nf">calculate_vbytes_from_weight</span><span class="p">(</span><span class="n">weight</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate vsize (virtual bytes) from weight units.</span>
+<span class="sd">    </span>
+<span class="sd">    Bitcoin uses weight units where:</span>
+<span class="sd">    - Legacy bytes: 4 weight units</span>
+<span class="sd">    - SegWit bytes: 1 weight unit</span>
+<span class="sd">    vbytes = (weight + 3) // 4</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">weight</span> <span class="o">+</span> <span class="mi">3</span><span class="p">)</span> <span class="o">//</span> <span class="mi">4</span></div>
+
+
+
+<div class="viewcode-block" id="calculate_fee_from_rate">
+<a class="viewcode-back" href="../../../api.html#ordex.consensus.fee.calculate_fee_from_rate">[docs]</a>
+<span class="k">def</span> <span class="nf">calculate_fee_from_rate</span><span class="p">(</span><span class="n">tx_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">feerate</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate fee given transaction size and feerate.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        tx_size: Transaction size in bytes</span>
+<span class="sd">        feerate: Fee rate in sat/vbyte</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Fee in satoshis</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">tx_size</span> <span class="o">*</span> <span class="n">feerate</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
