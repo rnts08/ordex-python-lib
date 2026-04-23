@@ -7,7 +7,10 @@ import pytest
 from ordex.chain.chainparams import oxc_mainnet, oxg_mainnet
 from ordex.core.base58 import b58encode, b58decode, b58check_encode, b58check_decode, bech32_encode, bech32_decode
 from ordex.core.key import PrivateKey, PublicKey
-from ordex.wallet.address import pubkey_to_p2pkh, pubkey_to_bech32, privkey_to_wif, generate_keypair
+from ordex.wallet.address import (
+    pubkey_to_p2pkh, pubkey_to_bech32, privkey_to_wif, generate_keypair,
+    p2pkh_to_pubkey_hash, bech32_to_pubkey_hash, decode_address,
+)
 
 
 class TestBase58:
@@ -137,3 +140,112 @@ class TestAddressGeneration:
         ver, payload = b58check_decode(kp["p2pkh"])
         assert ver == bytes([39])
         assert kp["p2wpkh"].startswith("oxg1")
+
+
+class TestAddressDecoding:
+    """Tests for address decoding functionality."""
+
+    def test_p2pkh_decode_oxc(self):
+        """Test decoding OXC P2PKH address."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        addr = pubkey_to_p2pkh(pub, params)
+        version, pkh = p2pkh_to_pubkey_hash(addr)
+        
+        assert version == bytes([76])
+        assert len(pkh) == 20
+        assert pkh == pub.hash160()
+
+    def test_p2pkh_decode_oxg(self):
+        """Test decoding OXG P2PKH address."""
+        params = oxg_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        addr = pubkey_to_p2pkh(pub, params)
+        version, pkh = p2pkh_to_pubkey_hash(addr)
+        
+        assert version == bytes([39])
+        assert len(pkh) == 20
+        assert pkh == pub.hash160()
+
+    def test_bech32_decode_oxc(self):
+        """Test decoding OXC Bech32 address."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        addr = pubkey_to_bech32(pub, params)
+        hrp, witver, witprog = bech32_to_pubkey_hash(addr)
+        
+        assert hrp == "oxc"
+        assert witver == 0
+        assert len(witprog) == 20
+        assert witprog == pub.hash160()
+
+    def test_bech32_decode_oxg(self):
+        """Test decoding OXG Bech32 address."""
+        params = oxg_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        addr = pubkey_to_bech32(pub, params)
+        hrp, witver, witprog = bech32_to_pubkey_hash(addr)
+        
+        assert hrp == "oxg"
+        assert witver == 0
+        assert len(witprog) == 20
+        assert witprog == pub.hash160()
+
+    def test_decode_address_p2pkh(self):
+        """Test generic decode_address for P2PKH."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        addr = pubkey_to_p2pkh(pub, params)
+        
+        result = decode_address(addr)
+        assert result["type"] == "p2pkh"
+        assert result["version"] == bytes([76])
+        assert result["hash"] == pub.hash160()
+
+    def test_decode_address_bech32(self):
+        """Test generic decode_address for Bech32."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        addr = pubkey_to_bech32(pub, params)
+        
+        result = decode_address(addr)
+        assert result["type"] == "bech32"
+        assert result["hrp"] == "oxc"
+        assert result["witness_version"] == 0
+        assert result["hash"] == pub.hash160()
+
+    def test_address_roundtrip_p2pkh(self):
+        """Test that encoding then decoding returns original hash."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        # Encode
+        addr = pubkey_to_p2pkh(pub, params)
+        # Decode
+        version, pkh = p2pkh_to_pubkey_hash(addr)
+        # Verify
+        assert pkh == pub.hash160()
+
+    def test_address_roundtrip_bech32(self):
+        """Test that encoding then decoding returns original hash."""
+        params = oxg_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        # Encode
+        addr = pubkey_to_bech32(pub, params)
+        # Decode
+        hrp, witver, witprog = bech32_to_pubkey_hash(addr)
+        # Verify
+        assert witprog == pub.hash160()
