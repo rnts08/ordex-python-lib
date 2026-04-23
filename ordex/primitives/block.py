@@ -148,13 +148,30 @@ class CBlock(CBlockHeader):
             f.write(self.mweb_block_data)
 
     @classmethod
-    def deserialize(cls, f: BinaryIO) -> "CBlock":
+    def deserialize(cls, f: BinaryIO, *, allow_mweb: bool = False) -> "CBlock":
         header = CBlockHeader.deserialize(f)
         block = cls(header=header)
         tx_count = read_compact_size(f)
         block.vtx = [CTransaction.deserialize(f) for _ in range(tx_count)]
-        # Note: MWEB block data deserialization would require additional context
+        
+        # MWEB block data - read remaining bytes if present and allowed
+        if allow_mweb:
+            remaining = f.read()
+            if remaining:
+                block.mweb_block_data = remaining
+        
         return block
+
+    def to_bytes(self, include_mweb: bool = True) -> bytes:
+        """Serialize the block to bytes."""
+        buf = BytesIO()
+        self.serialize(buf)
+        return buf.getvalue()
+
+    @classmethod
+    def from_bytes(cls, data: bytes, *, allow_mweb: bool = False) -> "CBlock":
+        """Deserialize a block from bytes."""
+        return cls.deserialize(BytesIO(data), allow_mweb=allow_mweb)
 
     def get_header(self) -> CBlockHeader:
         return CBlockHeader(

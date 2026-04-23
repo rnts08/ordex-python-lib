@@ -168,3 +168,120 @@ class TestPoW:
         """Zero target should always fail."""
         params = oxc_mainnet().consensus
         assert not check_proof_of_work(b"\x00" * 32, 0, params)
+
+
+class TestMWEBBlock:
+    """Tests for MWEB (MimbleWimble Extension Block) block support."""
+
+    def test_block_serialization_with_mweb(self):
+        """Test that blocks with MWEB data serialize correctly."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x1e0ffff0,
+            nonce=547178,
+        )
+        block.vtx = [
+            CTransaction(
+                version=1,
+                vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+                vout=[CTxOut(20 * 100_000_000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+                locktime=0,
+            )
+        ]
+        block.mweb_block_data = b"\x01\x02\x03\x04"  # Sample MWEB data
+        
+        data = block.to_bytes()
+        assert len(data) > 80  # Header + tx + mweb
+
+    def test_block_deserialization_with_mweb(self):
+        """Test that blocks with MWEB data deserialize correctly."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        
+        # Create block with MWEB data
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x1e0ffff0,
+            nonce=547178,
+        )
+        block.vtx = [
+            CTransaction(
+                version=1,
+                vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+                vout=[CTxOut(20 * 100_000_000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+                locktime=0,
+            )
+        ]
+        mweb_data = b"\x01\x02\x03\x04"
+        block.mweb_block_data = mweb_data
+        
+        # Roundtrip
+        data = block.to_bytes()
+        block2 = CBlock.from_bytes(data, allow_mweb=True)
+        
+        assert block2.version == block.version
+        assert block2.nonce == block.nonce
+        assert block2.mweb_block_data == mweb_data
+        assert len(block2.vtx) == 1
+
+    def test_block_without_mweb(self):
+        """Test that blocks without MWEB data work correctly."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x1e0ffff0,
+            nonce=547178,
+        )
+        block.vtx = [
+            CTransaction(
+                version=1,
+                vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+                vout=[CTxOut(20 * 100_000_000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+                locktime=0,
+            )
+        ]
+        
+        data = block.to_bytes()
+        block2 = CBlock.from_bytes(data, allow_mweb=True)
+        
+        assert block2.mweb_block_data == b""
+
+    def test_block_mweb_disabled(self):
+        """Test that MWEB data is ignored when allow_mweb=False."""
+        from ordex.primitives.transaction import CTransaction, CTxIn, CTxOut, COutPoint
+        
+        block = CBlock(
+            version=1,
+            hash_prev_block=b"\x00" * 32,
+            hash_merkle_root=b"\xab" * 32,
+            time=1706241753,
+            bits=0x1e0ffff0,
+            nonce=547178,
+        )
+        block.vtx = [
+            CTransaction(
+                version=1,
+                vin=[CTxIn(prevout=COutPoint(b"\x00" * 32, 0xFFFFFFFF), script_sig=b"test")],
+                vout=[CTxOut(20 * 100_000_000, b"\x76\xa9\x14" + b"\x00" * 20 + b"\x88\xac")],
+                locktime=0,
+            )
+        ]
+        block.mweb_block_data = b"\x01\x02\x03\x04"
+        
+        # Serialize with MWEB, deserialize without
+        data = block.to_bytes()
+        block2 = CBlock.from_bytes(data, allow_mweb=False)
+        
+        # MWEB data should be empty when disabled
+        assert block2.mweb_block_data == b""
