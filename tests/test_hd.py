@@ -231,13 +231,18 @@ class TestHDWalletDerivation:
         assert addr_info["p2pkh"].startswith("X")
 
     def test_derive_address_oxg(self):
-        wallet = HDWallet.generate(oxg_mainnet())
+        # Use a deterministic seed for consistent address generation
+        seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+        wallet = HDWallet.generate(oxg_mainnet(), seed=seed)
         account_key = wallet.derive_account(0)
         external_chain = wallet.derive_external_chain(account_key)
 
         addr_info = wallet.derive_address(external_chain, 0)
 
-        assert addr_info["p2pkh"].startswith("G")
+        # Verify it's a valid OXG address (version byte 39 = 'G')
+        from ordex.core.base58 import b58check_decode
+        version, _ = b58check_decode(addr_info["p2pkh"])
+        assert version == bytes([39])
         assert addr_info["p2wpkh"].startswith("oxg1")
 
     def test_get_receiving_addresses(self):
