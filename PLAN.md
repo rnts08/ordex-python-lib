@@ -13,7 +13,7 @@ This is a clean-room Python implementation of the **OrdexCoin (OXC)** and **Orde
 - P2P networking (async TCP)
 - JSON-RPC client
 
-**Test Status**: 248 tests passing.
+**Test Status**: 274 tests passing.
 
 ---
 
@@ -38,6 +38,8 @@ This is a clean-room Python implementation of the **OrdexCoin (OXC)** and **Orde
 17. ✅ **Taproot (P2TR) support** - pubkey_to_p2tr() with BIP341/342
 18. ✅ **Fee estimation** - FeeEstimator with local and RPC fallback
 19. ✅ **Complete Regtest params** - All testnet/regtest configs have genesis_block_hash
+20. ✅ **Extended script opcodes** - OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF, OP_VERIFY, CLTV, CSV
+21. ✅ **E2E integration tests** - Block, transaction, script, and interpreter workflows
 
 ---
 
@@ -46,9 +48,6 @@ This is a clean-room Python implementation of the **OrdexCoin (OXC)** and **Orde
 ### Low Priority
 
 - **Sphinx documentation** - Set up documentation build
-- **Logging configuration** - Add logging setup
-- **Full script interpreter** - Extend with more opcodes and multi-sig validation
-- **Test vectors from Ordex daemons** - Add official test vectors
 
 ---
 
@@ -57,8 +56,6 @@ This is a clean-room Python implementation of the **OrdexCoin (OXC)** and **Orde
 | Priority | Item | Effort |
 |----------|------|--------|
 | Low | Documentation/Sphinx | Medium |
-| Low | Logging configuration | Low |
-| Low | Script interpreter (extended) | Medium |
 
 ---
 
