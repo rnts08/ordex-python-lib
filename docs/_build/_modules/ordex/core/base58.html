@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.core.base58 &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.core.base58</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Base58Check and Bech32/Bech32m encoding/decoding.</span>
+
+<span class="sd">Used for generating human-readable OrdexCoin and OrdexGold addresses.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">from</span> <span class="nn">ordex.core.hash</span> <span class="kn">import</span> <span class="n">sha256d</span>
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Base58 alphabet</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="n">BASE58_ALPHABET</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz&quot;</span>
+<span class="n">_BASE58_MAP</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">BASE58_ALPHABET</span><span class="p">)}</span>
+
+
+<div class="viewcode-block" id="b58encode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.b58encode">[docs]</a>
+<span class="k">def</span> <span class="nf">b58encode</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encode bytes to a Base58 string.&quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;big&quot;</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">while</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">r</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">58</span><span class="p">)</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">BASE58_ALPHABET</span><span class="p">[</span><span class="n">r</span><span class="p">:</span><span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="c1"># Preserve leading zero bytes</span>
+    <span class="k">for</span> <span class="n">byte</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">byte</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;1&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="k">return</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">result</span><span class="p">))</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="b58decode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.b58decode">[docs]</a>
+<span class="k">def</span> <span class="nf">b58decode</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decode a Base58 string to bytes.&quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">):</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">n</span> <span class="o">*</span> <span class="mi">58</span> <span class="o">+</span> <span class="n">_BASE58_MAP</span><span class="p">[</span><span class="n">ch</span><span class="p">]</span>
+    <span class="c1"># Count leading &#39;1&#39;s → leading zero bytes</span>
+    <span class="n">pad_size</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">s</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">ch</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span><span class="p">:</span>
+            <span class="n">pad_size</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="c1"># Determine byte length</span>
+    <span class="n">byte_length</span> <span class="o">=</span> <span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">+</span> <span class="mi">7</span><span class="p">)</span> <span class="o">//</span> <span class="mi">8</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">byte_length</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">&quot;big&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="n">pad_size</span> <span class="o">+</span> <span class="n">result</span></div>
+
+
+
+<div class="viewcode-block" id="b58check_encode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.b58check_encode">[docs]</a>
+<span class="k">def</span> <span class="nf">b58check_encode</span><span class="p">(</span><span class="n">version</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encode with Base58Check (version + payload + 4-byte checksum).&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">version</span> <span class="o">+</span> <span class="n">payload</span>
+    <span class="n">checksum</span> <span class="o">=</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">data</span><span class="p">)[:</span><span class="mi">4</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">b58encode</span><span class="p">(</span><span class="n">data</span> <span class="o">+</span> <span class="n">checksum</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="b58check_decode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.b58check_decode">[docs]</a>
+<span class="k">def</span> <span class="nf">b58check_decode</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decode Base58Check, returning (version_byte, payload).</span>
+
+<span class="sd">    Raises ValueError on checksum mismatch.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">b58decode</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="n">payload</span><span class="p">,</span> <span class="n">checksum</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">4</span><span class="p">:]</span>
+    <span class="k">if</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">payload</span><span class="p">)[:</span><span class="mi">4</span><span class="p">]</span> <span class="o">!=</span> <span class="n">checksum</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Base58Check checksum mismatch&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">payload</span><span class="p">[:</span><span class="mi">1</span><span class="p">],</span> <span class="n">payload</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Bech32 / Bech32m (BIP173 / BIP350)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="n">_BECH32_CHARSET</span> <span class="o">=</span> <span class="s2">&quot;qpzry9x8gf2tvdw0s3jn54khce6mua7l&quot;</span>
+<span class="n">_BECH32_CHARSET_MAP</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">_BECH32_CHARSET</span><span class="p">)}</span>
+
+
+<span class="k">def</span> <span class="nf">_bech32_polymod</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Internal Bech32 checksum polymod function.&quot;&quot;&quot;</span>
+    <span class="n">GEN</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x3B6A57B2</span><span class="p">,</span> <span class="mh">0x26508E6D</span><span class="p">,</span> <span class="mh">0x1EA119FA</span><span class="p">,</span> <span class="mh">0x3D4233DD</span><span class="p">,</span> <span class="mh">0x2A1462B3</span><span class="p">]</span>
+    <span class="n">chk</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">chk</span> <span class="o">&gt;&gt;</span> <span class="mi">25</span>
+        <span class="n">chk</span> <span class="o">=</span> <span class="p">((</span><span class="n">chk</span> <span class="o">&amp;</span> <span class="mh">0x1FFFFFF</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">5</span><span class="p">)</span> <span class="o">^</span> <span class="n">v</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">chk</span> <span class="o">^=</span> <span class="n">GEN</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="p">((</span><span class="n">b</span> <span class="o">&gt;&gt;</span> <span class="n">i</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="k">return</span> <span class="n">chk</span>
+
+
+<span class="k">def</span> <span class="nf">_bech32_hrp_expand</span><span class="p">(</span><span class="n">hrp</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expand the HRP for checksum computation.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span><span class="nb">ord</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">5</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">hrp</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="nb">ord</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">31</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">hrp</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_bech32_create_checksum</span><span class="p">(</span><span class="n">hrp</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">spec</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a Bech32/Bech32m checksum.&quot;&quot;&quot;</span>
+    <span class="c1"># spec: 1 = bech32, 0x2bc830a3 = bech32m</span>
+    <span class="n">const</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">spec</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="mh">0x2BC830A3</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">_bech32_hrp_expand</span><span class="p">(</span><span class="n">hrp</span><span class="p">)</span> <span class="o">+</span> <span class="n">data</span>
+    <span class="n">polymod</span> <span class="o">=</span> <span class="n">_bech32_polymod</span><span class="p">(</span><span class="n">values</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">^</span> <span class="n">const</span>
+    <span class="k">return</span> <span class="p">[(</span><span class="n">polymod</span> <span class="o">&gt;&gt;</span> <span class="mi">5</span> <span class="o">*</span> <span class="p">(</span><span class="mi">5</span> <span class="o">-</span> <span class="n">i</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">31</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">)]</span>
+
+
+<span class="k">def</span> <span class="nf">_bech32_verify_checksum</span><span class="p">(</span><span class="n">hrp</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Verify checksum, returning the Bech32 spec version or None.&quot;&quot;&quot;</span>
+    <span class="n">const</span> <span class="o">=</span> <span class="n">_bech32_polymod</span><span class="p">(</span><span class="n">_bech32_hrp_expand</span><span class="p">(</span><span class="n">hrp</span><span class="p">)</span> <span class="o">+</span> <span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">const</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">1</span>  <span class="c1"># bech32</span>
+    <span class="k">if</span> <span class="n">const</span> <span class="o">==</span> <span class="mh">0x2BC830A3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">2</span>  <span class="c1"># bech32m</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">_convertbits</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">frombits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">tobits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;General power-of-2 base conversion.&quot;&quot;&quot;</span>
+    <span class="n">acc</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">maxv</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">tobits</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="p">(</span><span class="n">value</span> <span class="o">&gt;&gt;</span> <span class="n">frombits</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid value for convertbits: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">acc</span> <span class="o">=</span> <span class="p">(</span><span class="n">acc</span> <span class="o">&lt;&lt;</span> <span class="n">frombits</span><span class="p">)</span> <span class="o">|</span> <span class="n">value</span>
+        <span class="n">bits</span> <span class="o">+=</span> <span class="n">frombits</span>
+        <span class="k">while</span> <span class="n">bits</span> <span class="o">&gt;=</span> <span class="n">tobits</span><span class="p">:</span>
+            <span class="n">bits</span> <span class="o">-=</span> <span class="n">tobits</span>
+            <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">acc</span> <span class="o">&gt;&gt;</span> <span class="n">bits</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">maxv</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pad</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">bits</span><span class="p">:</span>
+            <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">acc</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">tobits</span> <span class="o">-</span> <span class="n">bits</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">maxv</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">bits</span> <span class="o">&gt;=</span> <span class="n">frombits</span> <span class="ow">or</span> <span class="p">((</span><span class="n">acc</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">tobits</span> <span class="o">-</span> <span class="n">bits</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">maxv</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid padding in convertbits&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span>
+
+
+<div class="viewcode-block" id="bech32_encode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.bech32_encode">[docs]</a>
+<span class="k">def</span> <span class="nf">bech32_encode</span><span class="p">(</span><span class="n">hrp</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">witver</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">witprog</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encode a witness program as a Bech32/Bech32m address.</span>
+
+<span class="sd">    witver 0 uses Bech32 (BIP173), witver 1+ uses Bech32m (BIP350).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">witver</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">2</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">witver</span><span class="p">]</span> <span class="o">+</span> <span class="n">_convertbits</span><span class="p">(</span><span class="n">witprog</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+    <span class="n">checksum</span> <span class="o">=</span> <span class="n">_bech32_create_checksum</span><span class="p">(</span><span class="n">hrp</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">hrp</span> <span class="o">+</span> <span class="s2">&quot;1&quot;</span> <span class="o">+</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_BECH32_CHARSET</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">data</span> <span class="o">+</span> <span class="n">checksum</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="bech32_decode">
+<a class="viewcode-back" href="../../../api.html#ordex.core.base58.bech32_decode">[docs]</a>
+<span class="k">def</span> <span class="nf">bech32_decode</span><span class="p">(</span><span class="n">bech</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decode a Bech32/Bech32m address.</span>
+
+<span class="sd">    Returns (hrp, witness_version, witness_program).</span>
+<span class="sd">    Raises ValueError on invalid encoding.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">bech_lower</span> <span class="o">=</span> <span class="n">bech</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">bech_lower</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s2">&quot;1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pos</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">pos</span> <span class="o">+</span> <span class="mi">7</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">bech_lower</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid bech32 string&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">33</span> <span class="ow">or</span> <span class="nb">ord</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">126</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">bech_lower</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid characters in bech32 string&quot;</span><span class="p">)</span>
+
+    <span class="n">hrp</span> <span class="o">=</span> <span class="n">bech_lower</span><span class="p">[:</span><span class="n">pos</span><span class="p">]</span>
+    <span class="n">data_part</span> <span class="o">=</span> <span class="n">bech_lower</span><span class="p">[</span><span class="n">pos</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">_BECH32_CHARSET_MAP</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data_part</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid character in bech32 data&quot;</span><span class="p">)</span>
+
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">_bech32_verify_checksum</span><span class="p">(</span><span class="n">hrp</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Bech32 checksum verification failed&quot;</span><span class="p">)</span>
+
+    <span class="n">decoded</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="o">-</span><span class="mi">6</span><span class="p">]</span>  <span class="c1"># strip checksum</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">decoded</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Empty bech32 data&quot;</span><span class="p">)</span>
+
+    <span class="n">witver</span> <span class="o">=</span> <span class="n">decoded</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">witprog</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">_convertbits</span><span class="p">(</span><span class="n">decoded</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">witver</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">spec</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Witness v0 must use Bech32 encoding&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">witver</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">spec</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Witness v1+ must use Bech32m encoding&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">hrp</span><span class="p">,</span> <span class="n">witver</span><span class="p">,</span> <span class="n">witprog</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

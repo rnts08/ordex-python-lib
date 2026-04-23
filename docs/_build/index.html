@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Ordex Python Library &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="ordex-python-library">
+<h1>Ordex Python Library<a class="headerlink" href="#ordex-python-library" title="Link to this heading">¶</a></h1>
+<p>A clean-room Python implementation of the OrdexCoin (OXC) and OrdexGold (OXG) blockchain protocols.</p>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Multi-chain support (OXC/SHA-256d, OXG/Scrypt+MWEB)</p></li>
+<li><p>Block and transaction primitives with serialization</p></li>
+<li><p>PoW validation and difficulty retargeting</p></li>
+<li><p>Address generation and decoding (P2PKH, P2SH, Bech32, P2TR)</p></li>
+<li><p>HD wallet support (BIP32/39)</p></li>
+<li><p>Script interpreter for basic validation</p></li>
+<li><p>Block validation with PoW and merkle root checks</p></li>
+<li><p>Fee estimation (local + RPC fallback)</p></li>
+<li><p>P2P networking (async TCP)</p></li>
+<li><p>JSON-RPC client</p></li>
+</ul>
+</section>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
+<p>Generate a wallet:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ordex.wallet.hd</span> <span class="kn">import</span> <span class="n">HDWallet</span><span class="p">,</span> <span class="n">ExtendedKey</span>
+<span class="kn">from</span> <span class="nn">ordex.wallet.bip39</span> <span class="kn">import</span> <span class="n">mnemonic_to_seed</span>
+<span class="kn">from</span> <span class="nn">ordex.chain.chainparams</span> <span class="kn">import</span> <span class="n">get_chain_params</span>
+
+<span class="n">seed</span> <span class="o">=</span> <span class="n">mnemonic_to_seed</span><span class="p">(</span>
+    <span class="s2">&quot;abandon &quot;</span> <span class="o">*</span> <span class="mi">11</span> <span class="o">+</span> <span class="s2">&quot;about&quot;</span><span class="p">,</span>
+    <span class="n">passphrase</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+<span class="p">)</span>
+<span class="n">params</span> <span class="o">=</span> <span class="n">get_chain_params</span><span class="p">(</span><span class="s2">&quot;OXC&quot;</span><span class="p">)</span>
+<span class="n">ek</span> <span class="o">=</span> <span class="n">ExtendedKey</span><span class="o">.</span><span class="n">from_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+<span class="n">wallet</span> <span class="o">=</span> <span class="n">HDWallet</span><span class="p">(</span><span class="n">ek</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+
+<span class="n">address</span> <span class="o">=</span> <span class="n">wallet</span><span class="o">.</span><span class="n">address</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Create a transaction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ordex.primitives.transaction</span> <span class="kn">import</span> <span class="n">CTransaction</span><span class="p">,</span> <span class="n">CTxIn</span><span class="p">,</span> <span class="n">CTxOut</span>
+
+<span class="n">tx</span> <span class="o">=</span> <span class="n">CTransaction</span><span class="p">()</span>
+
+<span class="n">txin</span> <span class="o">=</span> <span class="n">CTxIn</span><span class="p">(</span><span class="n">prevout</span><span class="o">=...</span><span class="p">)</span>
+<span class="n">tx</span><span class="o">.</span><span class="n">vin</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">txin</span><span class="p">)</span>
+
+<span class="n">txout</span> <span class="o">=</span> <span class="n">CTxOut</span><span class="p">(</span><span class="n">nValue</span><span class="o">=</span><span class="mi">100000</span><span class="p">,</span> <span class="n">script_pubkey</span><span class="o">=...</span><span class="p">)</span>
+<span class="n">tx</span><span class="o">.</span><span class="n">vout</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">txout</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading">¶</a></h2>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading">¶</a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

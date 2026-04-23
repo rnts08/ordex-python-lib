@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.primitives.block &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.primitives.block</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Block primitives for OrdexCoin and OrdexGold.</span>
+
+<span class="sd">Implements CBlockHeader and CBlock with chain-aware PoW hash computation,</span>
+<span class="sd">Merkle tree calculation, and genesis block creation.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">BinaryIO</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span> <span class="nn">ordex.core.hash</span> <span class="kn">import</span> <span class="n">sha256d</span><span class="p">,</span> <span class="n">scrypt_hash</span><span class="p">,</span> <span class="n">merkle_hash</span>
+<span class="kn">from</span> <span class="nn">ordex.core.script</span> <span class="kn">import</span> <span class="n">CScript</span><span class="p">,</span> <span class="n">CScriptNum</span><span class="p">,</span> <span class="n">OP_CHECKSIG</span>
+<span class="kn">from</span> <span class="nn">ordex.core.serialize</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">read_int32</span><span class="p">,</span> <span class="n">write_int32</span><span class="p">,</span>
+    <span class="n">read_uint32</span><span class="p">,</span> <span class="n">write_uint32</span><span class="p">,</span>
+    <span class="n">read_hash256</span><span class="p">,</span> <span class="n">write_hash256</span><span class="p">,</span>
+    <span class="n">read_compact_size</span><span class="p">,</span> <span class="n">write_compact_size</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">ordex.primitives.transaction</span> <span class="kn">import</span> <span class="n">CTransaction</span><span class="p">,</span> <span class="n">COutPoint</span><span class="p">,</span> <span class="n">CTxIn</span><span class="p">,</span> <span class="n">CTxOut</span>
+
+
+<div class="viewcode-block" id="CBlockHeader">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlockHeader">[docs]</a>
+<span class="k">class</span> <span class="nc">CBlockHeader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Standard 80-byte block header.</span>
+
+<span class="sd">    Fields:</span>
+<span class="sd">        version: Block version (int32)</span>
+<span class="sd">        hash_prev_block: Hash of the previous block (32 bytes, internal order)</span>
+<span class="sd">        hash_merkle_root: Merkle root of transactions (32 bytes)</span>
+<span class="sd">        time: Block timestamp (uint32, Unix epoch)</span>
+<span class="sd">        bits: Compact difficulty target (uint32)</span>
+<span class="sd">        nonce: Mining nonce (uint32)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">HEADER_SIZE</span> <span class="o">=</span> <span class="mi">80</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;hash_prev_block&quot;</span><span class="p">,</span> <span class="s2">&quot;hash_merkle_root&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;bits&quot;</span><span class="p">,</span> <span class="s2">&quot;nonce&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">hash_prev_block</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span>
+        <span class="n">hash_merkle_root</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">bits</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">nonce</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="n">version</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hash_prev_block</span> <span class="o">=</span> <span class="n">hash_prev_block</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hash_merkle_root</span> <span class="o">=</span> <span class="n">hash_merkle_root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bits</span> <span class="o">=</span> <span class="n">bits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nonce</span> <span class="o">=</span> <span class="n">nonce</span>
+
+    <span class="k">def</span> <span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="n">BinaryIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">write_int32</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">)</span>
+        <span class="n">write_hash256</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hash_prev_block</span><span class="p">)</span>
+        <span class="n">write_hash256</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hash_merkle_root</span><span class="p">)</span>
+        <span class="n">write_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
+        <span class="n">write_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bits</span><span class="p">)</span>
+        <span class="n">write_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonce</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">deserialize</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="n">BinaryIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CBlockHeader&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">version</span><span class="o">=</span><span class="n">read_int32</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+            <span class="n">hash_prev_block</span><span class="o">=</span><span class="n">read_hash256</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+            <span class="n">hash_merkle_root</span><span class="o">=</span><span class="n">read_hash256</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">read_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+            <span class="n">bits</span><span class="o">=</span><span class="n">read_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+            <span class="n">nonce</span><span class="o">=</span><span class="n">read_uint32</span><span class="p">(</span><span class="n">f</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">to_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">BytesIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_bytes</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CBlockHeader&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+
+<div class="viewcode-block" id="CBlockHeader.get_hash">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlockHeader.get_hash">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Block identification hash — always SHA-256d for both chains.</span>
+
+<span class="sd">        This is the hash used for block IDs, prev_block references, etc.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">sha256d</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="CBlockHeader.get_pow_hash">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlockHeader.get_pow_hash">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_pow_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_scrypt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Proof-of-work hash.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            use_scrypt: If True, use Scrypt (OrdexGold). Otherwise SHA-256d (OrdexCoin).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">header_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">use_scrypt</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scrypt_hash</span><span class="p">(</span><span class="n">header_bytes</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">header_bytes</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CBlockHeader.get_hash_hex">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlockHeader.get_hash_hex">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_hash_hex</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Block hash as display hex (reversed byte order).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_hash</span><span class="p">()[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span> <span class="nf">is_null</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bits</span> <span class="o">==</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;CBlockHeader(hash=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">get_hash_hex</span><span class="p">()[:</span><span class="mi">16</span><span class="p">]</span><span class="si">}</span><span class="s2">..., height_bits=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bits</span><span class="si">:</span><span class="s2">#x</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="CBlock">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlock">[docs]</a>
+<span class="k">class</span> <span class="nc">CBlock</span><span class="p">(</span><span class="n">CBlockHeader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A full block: header + transaction list.</span>
+
+<span class="sd">    For OrdexGold, blocks may also contain an MWEB block body stored as</span>
+<span class="sd">    opaque data (``mweb_block_data``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;vtx&quot;</span><span class="p">,</span> <span class="s2">&quot;mweb_block_data&quot;</span><span class="p">,</span> <span class="s2">&quot;_checked&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CBlockHeader</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">header</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+                <span class="n">version</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+                <span class="n">hash_prev_block</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">hash_prev_block</span><span class="p">,</span>
+                <span class="n">hash_merkle_root</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">hash_merkle_root</span><span class="p">,</span>
+                <span class="n">time</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+                <span class="n">bits</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">bits</span><span class="p">,</span>
+                <span class="n">nonce</span><span class="o">=</span><span class="n">header</span><span class="o">.</span><span class="n">nonce</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CTransaction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mweb_block_data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checked</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="n">BinaryIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Header</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="c1"># Transactions</span>
+        <span class="n">write_compact_size</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">:</span>
+            <span class="n">tx</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="c1"># MWEB block data (if present)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mweb_block_data</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mweb_block_data</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">deserialize</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">f</span><span class="p">:</span> <span class="n">BinaryIO</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_mweb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CBlock&quot;</span><span class="p">:</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">CBlockHeader</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">)</span>
+        <span class="n">tx_count</span> <span class="o">=</span> <span class="n">read_compact_size</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">block</span><span class="o">.</span><span class="n">vtx</span> <span class="o">=</span> <span class="p">[</span><span class="n">CTransaction</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">tx_count</span><span class="p">)]</span>
+        
+        <span class="c1"># MWEB block data - read remaining bytes if present and allowed</span>
+        <span class="k">if</span> <span class="n">allow_mweb</span><span class="p">:</span>
+            <span class="n">remaining</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">remaining</span><span class="p">:</span>
+                <span class="n">block</span><span class="o">.</span><span class="n">mweb_block_data</span> <span class="o">=</span> <span class="n">remaining</span>
+        
+        <span class="k">return</span> <span class="n">block</span>
+
+<div class="viewcode-block" id="CBlock.to_bytes">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlock.to_bytes">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">include_mweb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the block to bytes.&quot;&quot;&quot;</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">BytesIO</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="CBlock.from_bytes">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlock.from_bytes">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_bytes</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_mweb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CBlock&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize a block from bytes.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">allow_mweb</span><span class="o">=</span><span class="n">allow_mweb</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">get_header</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CBlockHeader</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">CBlockHeader</span><span class="p">(</span>
+            <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+            <span class="n">hash_prev_block</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hash_prev_block</span><span class="p">,</span>
+            <span class="n">hash_merkle_root</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hash_merkle_root</span><span class="p">,</span>
+            <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+            <span class="n">bits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bits</span><span class="p">,</span>
+            <span class="n">nonce</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nonce</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="CBlock.check">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.CBlock.check">[docs]</a>
+    <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">check_pow</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the block.</span>
+<span class="sd">        </span>
+<span class="sd">        Checks:</span>
+<span class="sd">        - First transaction is coinbase</span>
+<span class="sd">        - No duplicate transactions</span>
+<span class="sd">        - Merkle root matches transactions</span>
+<span class="sd">        - PoW (proof of work) - optional, enabled by default</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            params: ChainParams or ConsensusParams</span>
+<span class="sd">            check_pow: Whether to validate proof of work (default: True)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            True if block is valid</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If validation fails</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">ordex.consensus.pow</span> <span class="kn">import</span> <span class="n">check_proof_of_work</span>
+        <span class="kn">from</span> <span class="nn">ordex.consensus.params</span> <span class="kn">import</span> <span class="n">ConsensusParams</span>
+        
+        <span class="c1"># Get consensus params</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">ConsensusParams</span><span class="p">):</span>
+            <span class="n">consensus</span> <span class="o">=</span> <span class="n">params</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">consensus</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">consensus</span>
+        
+        <span class="c1"># Check first transaction is coinbase</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">is_coinbase</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;First transaction must be coinbase&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Check for duplicate transactions</span>
+        <span class="n">tx_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">tx</span><span class="o">.</span><span class="n">txid</span><span class="p">()</span> <span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tx_ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">tx_ids</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Duplicate transactions in block&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Check merkle root</span>
+        <span class="n">tx_hashes</span> <span class="o">=</span> <span class="p">[</span><span class="n">tx</span><span class="o">.</span><span class="n">txid</span><span class="p">()</span> <span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vtx</span><span class="p">]</span>
+        <span class="n">computed_merkle</span> <span class="o">=</span> <span class="n">compute_merkle_root</span><span class="p">(</span><span class="n">tx_hashes</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">computed_merkle</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hash_merkle_root</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Merkle root mismatch: computed=</span><span class="si">{</span><span class="n">computed_merkle</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;header=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">hash_merkle_root</span><span class="o">.</span><span class="n">hex</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        
+        <span class="c1"># Check PoW (optional - can be disabled for testing)</span>
+        <span class="k">if</span> <span class="n">check_pow</span><span class="p">:</span>
+            <span class="n">pow_hash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_pow_hash</span><span class="p">(</span><span class="n">use_scrypt</span><span class="o">=</span><span class="n">consensus</span><span class="o">.</span><span class="n">use_scrypt</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">check_proof_of_work</span><span class="p">(</span><span class="n">pow_hash</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bits</span><span class="p">,</span> <span class="n">consensus</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Proof of work check failed&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">True</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="InvalidBlock">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.InvalidBlock">[docs]</a>
+<span class="k">class</span> <span class="nc">InvalidBlock</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception raised when block validation fails.&quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Merkle tree computation</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="compute_merkle_root">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.compute_merkle_root">[docs]</a>
+<span class="k">def</span> <span class="nf">compute_merkle_root</span><span class="p">(</span><span class="n">tx_hashes</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">bytes</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the Merkle root from a list of transaction hashes.</span>
+
+<span class="sd">    Each hash should be in internal byte order (as returned by sha256d).</span>
+<span class="sd">    If the list has odd length, the last element is duplicated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">tx_hashes</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span>
+
+    <span class="n">level</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">tx_hashes</span><span class="p">)</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">level</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">level</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">level</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">level</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># duplicate last</span>
+        <span class="n">next_level</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">level</span><span class="p">),</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="n">next_level</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">merkle_hash</span><span class="p">(</span><span class="n">level</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">level</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">next_level</span>
+    <span class="k">return</span> <span class="n">level</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Genesis block creation</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="create_genesis_block">
+<a class="viewcode-back" href="../../../api.html#ordex.primitives.block.create_genesis_block">[docs]</a>
+<span class="k">def</span> <span class="nf">create_genesis_block</span><span class="p">(</span>
+    <span class="n">timestamp_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">genesis_output_script</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span>
+    <span class="n">ntime</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">nnonce</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">nbits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">nversion</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">genesis_reward</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CBlock</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a genesis block matching the C++ CreateGenesisBlock() function.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        timestamp_str: The coinbase script timestamp string (e.g. &quot;Memento Mori&quot;)</span>
+<span class="sd">        genesis_output_script: The output scriptPubKey (serialized CScript)</span>
+<span class="sd">        ntime: Block timestamp</span>
+<span class="sd">        nnonce: Block nonce</span>
+<span class="sd">        nbits: Compact difficulty target</span>
+<span class="sd">        nversion: Block version</span>
+<span class="sd">        genesis_reward: Coinbase reward in satoshis</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Build the coinbase transaction</span>
+    <span class="c1"># scriptSig: push 486604799 (0x1d00ffff as LE int) &lt;&lt; push CScriptNum(4) &lt;&lt; push timestamp string</span>
+    <span class="n">script_sig</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">bytes</span><span class="p">([</span><span class="mi">4</span><span class="p">])</span>  <span class="c1"># push 4 bytes</span>
+        <span class="o">+</span> <span class="p">(</span><span class="mi">486604799</span><span class="p">)</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;little&quot;</span><span class="p">)</span>
+        <span class="o">+</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># push 1 byte</span>
+        <span class="o">+</span> <span class="n">CScriptNum</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="o">+</span> <span class="nb">bytes</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">timestamp_str</span><span class="p">)])</span>
+        <span class="o">+</span> <span class="n">timestamp_str</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="n">coinbase_in</span> <span class="o">=</span> <span class="n">CTxIn</span><span class="p">(</span>
+        <span class="n">prevout</span><span class="o">=</span><span class="n">COutPoint</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span> <span class="mh">0xFFFFFFFF</span><span class="p">),</span>
+        <span class="n">script_sig</span><span class="o">=</span><span class="n">script_sig</span><span class="p">,</span>
+        <span class="n">sequence</span><span class="o">=</span><span class="mh">0xFFFFFFFF</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">coinbase_out</span> <span class="o">=</span> <span class="n">CTxOut</span><span class="p">(</span>
+        <span class="n">value</span><span class="o">=</span><span class="n">genesis_reward</span><span class="p">,</span>
+        <span class="n">script_pubkey</span><span class="o">=</span><span class="n">genesis_output_script</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">coinbase_tx</span> <span class="o">=</span> <span class="n">CTransaction</span><span class="p">(</span>
+        <span class="n">version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">vin</span><span class="o">=</span><span class="p">[</span><span class="n">coinbase_in</span><span class="p">],</span>
+        <span class="n">vout</span><span class="o">=</span><span class="p">[</span><span class="n">coinbase_out</span><span class="p">],</span>
+        <span class="n">locktime</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Build the block</span>
+    <span class="n">block</span> <span class="o">=</span> <span class="n">CBlock</span><span class="p">(</span>
+        <span class="n">version</span><span class="o">=</span><span class="n">nversion</span><span class="p">,</span>
+        <span class="n">hash_prev_block</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span>
+        <span class="n">hash_merkle_root</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span>  <span class="c1"># will be set below</span>
+        <span class="n">time</span><span class="o">=</span><span class="n">ntime</span><span class="p">,</span>
+        <span class="n">bits</span><span class="o">=</span><span class="n">nbits</span><span class="p">,</span>
+        <span class="n">nonce</span><span class="o">=</span><span class="n">nnonce</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">block</span><span class="o">.</span><span class="n">vtx</span> <span class="o">=</span> <span class="p">[</span><span class="n">coinbase_tx</span><span class="p">]</span>
+    <span class="n">block</span><span class="o">.</span><span class="n">hash_merkle_root</span> <span class="o">=</span> <span class="n">compute_merkle_root</span><span class="p">([</span><span class="n">coinbase_tx</span><span class="o">.</span><span class="n">txid</span><span class="p">()])</span>
+
+    <span class="k">return</span> <span class="n">block</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

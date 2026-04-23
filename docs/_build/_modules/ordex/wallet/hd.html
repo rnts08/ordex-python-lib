@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.wallet.hd &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.wallet.hd</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">BIP32 HD Wallet implementation for OrdexCoin and OrdexGold.</span>
+
+<span class="sd">Provides hierarchical deterministic key derivation as per BIP32.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">hmac</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">from</span> <span class="nn">ordex.core.key</span> <span class="kn">import</span> <span class="n">PrivateKey</span><span class="p">,</span> <span class="n">PublicKey</span>
+<span class="kn">from</span> <span class="nn">ordex.core.hash</span> <span class="kn">import</span> <span class="n">hash160</span><span class="p">,</span> <span class="n">sha256d</span>
+
+
+<span class="n">BIP32_VERSION_MAINNET_PUB</span> <span class="o">=</span> <span class="mh">0x0488B21E</span>  <span class="c1"># Extended key version for mainnet (public)</span>
+<span class="n">BIP32_VERSION_MAINNET_PRIV</span> <span class="o">=</span> <span class="mh">0x0488ADE4</span>  <span class="c1"># Extended key version for mainnet (private)</span>
+<span class="n">BIP32_VERSION_TESTNET_PUB</span> <span class="o">=</span> <span class="mh">0x043587CF</span>  <span class="c1"># Extended key version for testnet (public)</span>
+<span class="n">BIP32_VERSION_TESTNET_PRIV</span> <span class="o">=</span> <span class="mh">0x04358395</span>  <span class="c1"># Extended key version for testnet (private)</span>
+
+
+<span class="k">def</span> <span class="nf">_get_version</span><span class="p">(</span><span class="n">version</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">is_private</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">network_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the correct version byte based on key type and network.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">is_private</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">BIP32_VERSION_MAINNET_PRIV</span> <span class="k">if</span> <span class="n">network_id</span> <span class="o">==</span> <span class="s2">&quot;main&quot;</span> <span class="k">else</span> <span class="n">BIP32_VERSION_TESTNET_PRIV</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">BIP32_VERSION_MAINNET_PUB</span> <span class="k">if</span> <span class="n">network_id</span> <span class="o">==</span> <span class="s2">&quot;main&quot;</span> <span class="k">else</span> <span class="n">BIP32_VERSION_TESTNET_PUB</span>
+
+
+<span class="kn">from</span> <span class="nn">ecdsa</span> <span class="kn">import</span> <span class="n">SECP256k1</span>
+
+<span class="n">SECP256K1_ORDER</span> <span class="o">=</span> <span class="n">SECP256k1</span><span class="o">.</span><span class="n">order</span>
+
+
+<div class="viewcode-block" id="BIP32Path">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.BIP32Path">[docs]</a>
+<span class="k">class</span> <span class="nc">BIP32Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents a BIP32 derivation path.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;m&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a derivation path like m/44&#39;/0&#39;/0&#39;/0/0&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;m&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Path must start with &#39;m&#39;&quot;</span><span class="p">)</span>
+        
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>  <span class="c1"># Skip &#39;m&#39;</span>
+            <span class="k">if</span> <span class="n">part</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">):</span>
+                <span class="n">hardened</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">part</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">hardened</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="n">hardened</span><span class="p">:</span>
+                <span class="n">index</span> <span class="o">|=</span> <span class="mh">0x80000000</span>  <span class="c1"># Add hardened flag</span>
+            
+            <span class="n">indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">indices</span>
+    
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span>
+    
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;BIP32Path(&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">&#39;)&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="ExtendedKey">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey">[docs]</a>
+<span class="k">class</span> <span class="nc">ExtendedKey</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An extended key (private or public) for BIP32.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span>
+        <span class="n">chain_code</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">parent_fingerprint</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">child_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">is_private</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>  <span class="c1"># 32 bytes for private, 33 for public</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chain_code</span> <span class="o">=</span> <span class="n">chain_code</span>  <span class="c1"># 32 bytes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="n">version</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">=</span> <span class="n">depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent_fingerprint</span> <span class="o">=</span> <span class="n">parent_fingerprint</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">child_index</span> <span class="o">=</span> <span class="n">child_index</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span> <span class="o">=</span> <span class="n">is_private</span>
+    
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">fingerprint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the fingerprint of this key.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="c1"># For private keys, derive the public key first</span>
+            <span class="n">priv</span> <span class="o">=</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">pub</span> <span class="o">=</span> <span class="n">priv</span><span class="o">.</span><span class="n">public_key</span><span class="p">(</span><span class="n">compressed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">hash160_bytes</span> <span class="o">=</span> <span class="n">hash160</span><span class="p">(</span><span class="n">pub</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">hash160_bytes</span> <span class="o">=</span> <span class="n">hash160</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">hash160_bytes</span><span class="p">[:</span><span class="mi">4</span><span class="p">],</span> <span class="s2">&quot;big&quot;</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="ExtendedKey.to_base58">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.to_base58">[docs]</a>
+    <span class="k">def</span> <span class="nf">to_base58</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the extended key to Base58Check format.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">ordex.core.base58</span> <span class="kn">import</span> <span class="n">b58check_encode</span><span class="p">,</span> <span class="n">b58encode</span><span class="p">,</span> <span class="n">sha256d</span>
+        
+        <span class="c1"># Determine correct version based on key type</span>
+        <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">version</span> <span class="o">==</span> <span class="n">BIP32_VERSION_MAINNET_PUB</span><span class="p">:</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">BIP32_VERSION_MAINNET_PRIV</span>
+            <span class="k">elif</span> <span class="n">version</span> <span class="o">==</span> <span class="n">BIP32_VERSION_TESTNET_PUB</span><span class="p">:</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">BIP32_VERSION_TESTNET_PRIV</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">version</span> <span class="o">==</span> <span class="n">BIP32_VERSION_MAINNET_PRIV</span><span class="p">:</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">BIP32_VERSION_MAINNET_PUB</span>
+            <span class="k">elif</span> <span class="n">version</span> <span class="o">==</span> <span class="n">BIP32_VERSION_TESTNET_PRIV</span><span class="p">:</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">BIP32_VERSION_TESTNET_PUB</span>
+        
+        <span class="c1"># Format: version (4) + depth (1) + parent_fp (4) + child_idx (4) + chain_code (32) + key (33/32)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">version</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_fingerprint</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">child_index</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain_code</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">+=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span>  <span class="c1"># 0x00 prefix for private keys</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span>
+        
+        <span class="c1"># Extended key uses version as first 4 bytes, not 1 byte</span>
+        <span class="c1"># So we do base58check manually: version (4) + payload + checksum</span>
+        <span class="n">checksum</span> <span class="o">=</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">data</span><span class="p">)[:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">b58encode</span><span class="p">(</span><span class="n">data</span> <span class="o">+</span> <span class="n">checksum</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="ExtendedKey.from_base58">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.from_base58">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_base58</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">encoded</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ExtendedKey&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deserialize an extended key from Base58Check format.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">ordex.core.base58</span> <span class="kn">import</span> <span class="n">b58decode</span><span class="p">,</span> <span class="n">b58encode</span><span class="p">,</span> <span class="n">sha256d</span>
+        
+        <span class="n">data</span> <span class="o">=</span> <span class="n">b58decode</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span>
+        
+        <span class="c1"># Verify checksum</span>
+        <span class="n">payload</span><span class="p">,</span> <span class="n">checksum</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">4</span><span class="p">:]</span>
+        <span class="k">if</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">payload</span><span class="p">)[:</span><span class="mi">4</span><span class="p">]</span> <span class="o">!=</span> <span class="n">checksum</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid checksum&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Format: version (4) + depth (1) + parent_fp (4) + child_idx (4) + chain_code (32) + key (33/32)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">78</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid extended key length: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="n">version_int</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">[:</span><span class="mi">4</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">depth</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">parent_fp</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">9</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">child_idx</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">[</span><span class="mi">9</span><span class="p">:</span><span class="mi">13</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">chain_code</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="mi">13</span><span class="p">:</span><span class="mi">45</span><span class="p">]</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="mi">45</span><span class="p">:]</span>
+        
+        <span class="n">is_private</span> <span class="o">=</span> <span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">is_private</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>  <span class="c1"># Remove 0x00 prefix</span>
+        
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+            <span class="n">chain_code</span><span class="o">=</span><span class="n">chain_code</span><span class="p">,</span>
+            <span class="n">version</span><span class="o">=</span><span class="n">version_int</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span>
+            <span class="n">parent_fingerprint</span><span class="o">=</span><span class="n">parent_fp</span><span class="p">,</span>
+            <span class="n">child_index</span><span class="o">=</span><span class="n">child_idx</span><span class="p">,</span>
+            <span class="n">is_private</span><span class="o">=</span><span class="n">is_private</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="ExtendedKey.derive">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.derive">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">hardened</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ExtendedKey&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive a child key at the given index.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            index: Child index (0-2^31-1 for normal, 2^31-2^32-1 for hardened)</span>
+<span class="sd">            hardened: Whether to use hardened derivation</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            New ExtendedKey instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">hardened</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">|=</span> <span class="mh">0x80000000</span>  <span class="c1"># Set hardened bit</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="c1"># Private key derivation</span>
+            <span class="k">if</span> <span class="n">hardened</span><span class="p">:</span>
+                <span class="c1"># Hardened: 0x00 || ser256(k) || ser32(i)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">+</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Normal: serP(point(k)) || ser32(i)</span>
+                <span class="n">priv</span> <span class="o">=</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">pub</span> <span class="o">=</span> <span class="n">priv</span><span class="o">.</span><span class="n">public_key</span><span class="p">(</span><span class="n">compressed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">pub</span><span class="o">.</span><span class="n">data</span> <span class="o">+</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Public key derivation</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">+</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&gt;I&quot;</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        
+        <span class="c1"># HMAC-SHA512 with chain code as key</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">hmac</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">chain_code</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha512</span><span class="p">)</span>
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+        <span class="n">il</span><span class="p">,</span> <span class="n">ir</span> <span class="o">=</span> <span class="n">digest</span><span class="p">[:</span><span class="mi">32</span><span class="p">],</span> <span class="n">digest</span><span class="p">[</span><span class="mi">32</span><span class="p">:]</span>
+        
+        <span class="n">il_int</span> <span class="o">=</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">il</span><span class="p">,</span> <span class="s2">&quot;big&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="c1"># Child private key = parse256(il) + k (mod n)</span>
+            <span class="n">child_key</span> <span class="o">=</span> <span class="p">(</span><span class="n">il_int</span> <span class="o">+</span> <span class="nb">int</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;big&quot;</span><span class="p">))</span> <span class="o">%</span> <span class="n">SECP256K1_ORDER</span>
+            <span class="n">child_key</span> <span class="o">=</span> <span class="n">child_key</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="s2">&quot;big&quot;</span><span class="p">)</span>
+            
+            <span class="k">return</span> <span class="n">ExtendedKey</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">child_key</span><span class="p">,</span>
+                <span class="n">chain_code</span><span class="o">=</span><span class="n">ir</span><span class="p">,</span>
+                <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+                <span class="n">depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="n">parent_fingerprint</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+                <span class="n">child_index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+                <span class="n">is_private</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Child public key = point(il) + parent_pubkey</span>
+            <span class="c1"># For simplicity, we use the ecdsa library</span>
+            <span class="kn">from</span> <span class="nn">ecdsa</span> <span class="kn">import</span> <span class="n">SECP256k1</span><span class="p">,</span> <span class="n">ellipticcurve</span>
+            
+            <span class="c1"># Get parent public key point</span>
+            <span class="n">priv</span> <span class="o">=</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">vk</span> <span class="o">=</span> <span class="n">priv</span><span class="o">.</span><span class="n">_key</span><span class="o">.</span><span class="n">get_verifying_key</span><span class="p">()</span>
+            <span class="n">parent_point</span> <span class="o">=</span> <span class="n">vk</span><span class="o">.</span><span class="n">pubkey</span><span class="o">.</span><span class="n">point</span>
+            
+            <span class="c1"># Multiply il by G</span>
+            <span class="n">il_point</span> <span class="o">=</span> <span class="n">SECP256k1</span><span class="o">.</span><span class="n">generator</span> <span class="o">*</span> <span class="n">il_int</span>
+            
+            <span class="c1"># Add to parent point</span>
+            <span class="n">child_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">parent_point</span><span class="o">.</span><span class="n">x</span><span class="p">()</span> <span class="o">+</span> <span class="n">il_point</span><span class="o">.</span><span class="n">x</span><span class="p">())</span> <span class="o">%</span> <span class="n">SECP256k1</span><span class="o">.</span><span class="n">curve</span><span class="o">.</span><span class="n">p</span>
+            <span class="n">child_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">parent_point</span><span class="o">.</span><span class="n">y</span><span class="p">()</span> <span class="o">+</span> <span class="n">il_point</span><span class="o">.</span><span class="n">y</span><span class="p">())</span> <span class="o">%</span> <span class="n">SECP256k1</span><span class="o">.</span><span class="n">curve</span><span class="o">.</span><span class="n">p</span>
+            
+            <span class="n">child_key</span> <span class="o">=</span> <span class="n">PublicKey</span><span class="o">.</span><span class="n">from_point</span><span class="p">(</span><span class="n">child_x</span><span class="p">,</span> <span class="n">child_y</span><span class="p">,</span> <span class="n">compressed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+            
+            <span class="k">return</span> <span class="n">ExtendedKey</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">child_key</span><span class="p">,</span>
+                <span class="n">chain_code</span><span class="o">=</span><span class="n">ir</span><span class="p">,</span>
+                <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+                <span class="n">depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="n">parent_fingerprint</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">,</span>
+                <span class="n">child_index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+                <span class="n">is_private</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="ExtendedKey.derive_path">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.derive_path">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ExtendedKey&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive a key from a path like m/44&#39;/0&#39;/0&#39;/0/0&quot;&quot;&quot;</span>
+        <span class="n">bip32_path</span> <span class="o">=</span> <span class="n">BIP32Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span>
+        
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">bip32_path</span><span class="o">.</span><span class="n">_indices</span><span class="p">:</span>
+            <span class="n">hardened</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">idx</span> <span class="o">&amp;</span> <span class="mh">0x80000000</span><span class="p">)</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">&amp;</span> <span class="mh">0x7FFFFFFF</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">derive</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">hardened</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">key</span></div>
+
+    
+<div class="viewcode-block" id="ExtendedKey.private_key">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.private_key">[docs]</a>
+    <span class="k">def</span> <span class="nf">private_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PrivateKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the PrivateKey object from this extended key.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot get private key from public extended key&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="ExtendedKey.public_key">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.ExtendedKey.public_key">[docs]</a>
+    <span class="k">def</span> <span class="nf">public_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PublicKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the PublicKey object from this extended key.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">PrivateKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span><span class="o">.</span><span class="n">public_key</span><span class="p">(</span><span class="n">compressed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">PublicKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span></div>
+
+    
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;ExtendedKey(depth=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="si">}</span><span class="s2">, is_private=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">is_private</span><span class="si">}</span><span class="s2">, fingerprint=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fingerprint</span><span class="si">:</span><span class="s2">08x</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="HDWallet">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet">[docs]</a>
+<span class="k">class</span> <span class="nc">HDWallet</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;HD Wallet for BIP32 key derivation.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_key</span><span class="p">:</span> <span class="n">ExtendedKey</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root_key</span> <span class="o">=</span> <span class="n">root_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
+    
+<div class="viewcode-block" id="HDWallet.generate">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.generate">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDWallet&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a new HD wallet from random seed or specified seed.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            params: ChainParams for the network</span>
+<span class="sd">            seed: Optional 64-byte seed (if None, generates random)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            HDWallet instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">os</span>
+            <span class="n">seed</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">urandom</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span>
+        
+        <span class="c1"># BIP32 seed derivation using &quot;Bitcoin seed&quot;</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">hmac</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Bitcoin seed&quot;</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha512</span><span class="p">)</span>
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+        <span class="n">il</span><span class="p">,</span> <span class="n">ir</span> <span class="o">=</span> <span class="n">digest</span><span class="p">[:</span><span class="mi">32</span><span class="p">],</span> <span class="n">digest</span><span class="p">[</span><span class="mi">32</span><span class="p">:]</span>
+        
+        <span class="n">version</span> <span class="o">=</span> <span class="n">BIP32_VERSION_MAINNET_PRIV</span> <span class="k">if</span> <span class="n">params</span><span class="o">.</span><span class="n">network_id</span> <span class="o">==</span> <span class="s2">&quot;main&quot;</span> <span class="k">else</span> <span class="n">BIP32_VERSION_TESTNET_PRIV</span>
+        
+        <span class="n">root_key</span> <span class="o">=</span> <span class="n">ExtendedKey</span><span class="p">(</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">il</span><span class="p">,</span>
+            <span class="n">chain_code</span><span class="o">=</span><span class="n">ir</span><span class="p">,</span>
+            <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">parent_fingerprint</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">child_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">is_private</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">root_key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.from_mnemonic">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.from_mnemonic">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_mnemonic</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">mnemonic</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">passphrase</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDWallet&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create HD wallet from BIP39 mnemonic.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            params: ChainParams for the network</span>
+<span class="sd">            mnemonic: BIP39 mnemonic phrase</span>
+<span class="sd">            passphrase: Optional passphrase for PBKDF2</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            HDWallet instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">.bip39</span> <span class="kn">import</span> <span class="n">mnemonic_to_seed</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="n">mnemonic_to_seed</span><span class="p">(</span><span class="n">mnemonic</span><span class="p">,</span> <span class="n">passphrase</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.from_extended_key">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.from_extended_key">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_extended_key</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">extended_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDWallet&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create HD wallet from an extended key string.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            extended_key: Base58 encoded extended private key</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            HDWallet instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">ExtendedKey</span><span class="o">.</span><span class="n">from_base58</span><span class="p">(</span><span class="n">extended_key</span><span class="p">)</span>
+        
+        <span class="c1"># Determine params from version</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">version</span> <span class="ow">in</span> <span class="p">(</span><span class="n">BIP32_VERSION_MAINNET_PUB</span><span class="p">,</span> <span class="n">BIP32_VERSION_MAINNET_PRIV</span><span class="p">):</span>
+            <span class="kn">from</span> <span class="nn">ordex.chain.chainparams</span> <span class="kn">import</span> <span class="n">oxc_mainnet</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">oxc_mainnet</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">ordex.chain.chainparams</span> <span class="kn">import</span> <span class="n">oxc_testnet</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">oxc_testnet</span><span class="p">()</span>
+        
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.derive_account">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.derive_account">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive_account</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">purpose</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">44</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExtendedKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive an account key (e.g., m/44&#39;/0&#39;/0&#39;).</span>
+<span class="sd">        </span>
+<span class="sd">        For OrdexCoin (OXC): purpose=44, coin_type=0</span>
+<span class="sd">        For OrdexGold (OXG): purpose=44, coin_type=1</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            account: Account index</span>
+<span class="sd">            purpose: BIP purpose (default: 44 for BIP44)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            ExtendedKey for the account</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Determine coin type from params</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">pubkey_address_prefix</span> <span class="o">==</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">76</span><span class="p">]):</span>  <span class="c1"># OXC mainnet</span>
+            <span class="n">coin_type</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">pubkey_address_prefix</span> <span class="o">==</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">39</span><span class="p">]):</span>  <span class="c1"># OXG mainnet</span>
+            <span class="n">coin_type</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Testnet</span>
+            <span class="n">coin_type</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Use same as OXG testnet</span>
+        
+        <span class="c1"># Derive: m/purpose&#39;/coin&#39;/account&#39;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;m/</span><span class="si">{</span><span class="n">purpose</span><span class="si">}</span><span class="s2">&#39;/</span><span class="si">{</span><span class="n">coin_type</span><span class="si">}</span><span class="s2">&#39;/</span><span class="si">{</span><span class="n">account</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_key</span><span class="o">.</span><span class="n">derive_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.derive_external_chain">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.derive_external_chain">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive_external_chain</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account_key</span><span class="p">:</span> <span class="n">ExtendedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExtendedKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive the external chain (receive addresses).</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            account_key: Account extended key</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            ExtendedKey for external chain</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">account_key</span><span class="o">.</span><span class="n">derive</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.derive_internal_chain">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.derive_internal_chain">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive_internal_chain</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account_key</span><span class="p">:</span> <span class="n">ExtendedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExtendedKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive the internal chain (change addresses).</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            account_key: Account extended key</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            ExtendedKey for internal chain</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">account_key</span><span class="o">.</span><span class="n">derive</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.derive_address">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.derive_address">[docs]</a>
+    <span class="k">def</span> <span class="nf">derive_address</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chain_key</span><span class="p">:</span> <span class="n">ExtendedKey</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Derive an address at the given index.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            chain_key: Chain extended key (external or internal)</span>
+<span class="sd">            index: Address index</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict with privkey, pubkey, address info</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">chain_key</span><span class="o">.</span><span class="n">derive</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        
+        <span class="kn">from</span> <span class="nn">ordex.wallet.address</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">pubkey_to_p2pkh</span><span class="p">,</span> <span class="n">pubkey_to_bech32</span><span class="p">,</span> <span class="n">privkey_to_wif</span><span class="p">,</span>
+            <span class="n">generate_keypair</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="n">pubkey</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">public_key</span><span class="p">()</span>
+        <span class="n">privkey</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">private_key</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">is_private</span> <span class="k">else</span> <span class="kc">None</span>
+        
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;private_key&quot;</span><span class="p">:</span> <span class="n">privkey</span><span class="p">,</span>
+            <span class="s2">&quot;public_key&quot;</span><span class="p">:</span> <span class="n">pubkey</span><span class="p">,</span>
+            <span class="s2">&quot;pubkey_hash&quot;</span><span class="p">:</span> <span class="n">pubkey</span><span class="o">.</span><span class="n">hash160</span><span class="p">(),</span>
+            <span class="s2">&quot;p2pkh&quot;</span><span class="p">:</span> <span class="n">pubkey_to_p2pkh</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">),</span>
+            <span class="s2">&quot;p2wpkh&quot;</span><span class="p">:</span> <span class="n">pubkey_to_bech32</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">),</span>
+            <span class="s2">&quot;wif&quot;</span><span class="p">:</span> <span class="n">privkey_to_wif</span><span class="p">(</span><span class="n">privkey</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">if</span> <span class="n">privkey</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;m/44&#39;/</span><span class="si">{</span><span class="mi">1</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">pubkey_address_prefix</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb">bytes</span><span class="p">([</span><span class="mi">39</span><span class="p">])</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">0</span><span class="si">}</span><span class="s2">&#39;/0&#39;/</span><span class="si">{</span><span class="mi">0</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">chain_key</span><span class="o">.</span><span class="n">child_index</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.get_receiving_addresses">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.get_receiving_addresses">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_receiving_addresses</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a list of receiving addresses.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            account: Account index</span>
+<span class="sd">            count: Number of addresses to generate</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            List of address dicts</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">account_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">derive_account</span><span class="p">(</span><span class="n">account</span><span class="p">)</span>
+        <span class="n">external_chain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">derive_external_chain</span><span class="p">(</span><span class="n">account_key</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">derive_address</span><span class="p">(</span><span class="n">external_chain</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)]</span></div>
+
+    
+<div class="viewcode-block" id="HDWallet.get_change_addresses">
+<a class="viewcode-back" href="../../../api.html#ordex.wallet.hd.HDWallet.get_change_addresses">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_change_addresses</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a list of change addresses.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            account: Account index</span>
+<span class="sd">            count: Number of addresses to generate</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            List of address dicts</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">account_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">derive_account</span><span class="p">(</span><span class="n">account</span><span class="p">)</span>
+        <span class="n">internal_chain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">derive_internal_chain</span><span class="p">(</span><span class="n">account_key</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">derive_address</span><span class="p">(</span><span class="n">internal_chain</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)]</span></div>
+</div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

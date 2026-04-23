@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.chain.chainparams &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.chain.chainparams</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Full chain parameters for all OrdexCoin and OrdexGold networks.</span>
+
+<span class="sd">Provides pre-configured ChainParams instances for mainnet, testnet,</span>
+<span class="sd">and regtest for both chains.  All values extracted from the C++ source</span>
+<span class="sd">files: chainparams.cpp and kernel/chainparams.cpp.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">from</span> <span class="nn">ordex.consensus.params</span> <span class="kn">import</span> <span class="n">ConsensusParams</span><span class="p">,</span> <span class="n">BIP9Deployment</span>
+<span class="kn">from</span> <span class="nn">ordex.core.uint256</span> <span class="kn">import</span> <span class="n">Uint256</span>
+
+
+<div class="viewcode-block" id="ChainParams">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.ChainParams">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Complete set of parameters defining a blockchain network.&quot;&quot;&quot;</span>
+
+    <span class="c1"># Identity</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">network_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>  <span class="c1"># &quot;main&quot;, &quot;test&quot;, &quot;regtest&quot;</span>
+
+    <span class="c1"># Consensus</span>
+    <span class="n">consensus</span><span class="p">:</span> <span class="n">ConsensusParams</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">ConsensusParams</span><span class="p">)</span>
+
+    <span class="c1"># Network</span>
+    <span class="n">message_start</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00\x00\x00\x00</span><span class="s2">&quot;</span>
+    <span class="n">default_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">protocol_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">70016</span>
+    <span class="n">prune_after_height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Address encoding</span>
+    <span class="n">pubkey_address_prefix</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span>      <span class="c1"># Base58 version byte</span>
+    <span class="n">script_address_prefix</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span>
+    <span class="n">secret_key_prefix</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span>
+    <span class="n">ext_pubkey_prefix</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00\x00\x00\x00</span><span class="s2">&quot;</span>  <span class="c1"># BIP32 extended pubkey</span>
+    <span class="n">ext_secret_prefix</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00\x00\x00\x00</span><span class="s2">&quot;</span>  <span class="c1"># BIP32 extended secret</span>
+    <span class="n">bech32_hrp</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">mweb_hrp</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>  <span class="c1"># OXG only</span>
+
+    <span class="c1"># Genesis block data</span>
+    <span class="n">genesis_block_hash</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">genesis_merkle_root</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">genesis_timestamp</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Memento Mori&quot;</span>
+    <span class="n">genesis_time</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">genesis_nonce</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">genesis_bits</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">genesis_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">genesis_reward</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># satoshis</span>
+    <span class="n">genesis_output_script</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span>
+
+    <span class="c1"># DNS seeds</span>
+    <span class="n">dns_seeds</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="c1"># Checkpoints</span>
+    <span class="n">checkpoints</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+    <span class="c1"># Coinbase maturity</span>
+    <span class="n">coinbase_maturity</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># OrdexCoin (OXC) Chain Parameters</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_oxc_genesis_output_script</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The genesis coinbase output script pubkey for OXC.&quot;&quot;&quot;</span>
+    <span class="c1"># 65-byte uncompressed pubkey + OP_CHECKSIG</span>
+    <span class="n">pubkey</span> <span class="o">=</span> <span class="nb">bytes</span><span class="o">.</span><span class="n">fromhex</span><span class="p">(</span>
+        <span class="s2">&quot;040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b&quot;</span>
+        <span class="s2">&quot;10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9&quot;</span>
+    <span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">ordex.core.script</span> <span class="kn">import</span> <span class="n">OP_CHECKSIG</span>
+    <span class="k">return</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">65</span><span class="p">])</span> <span class="o">+</span> <span class="n">pubkey</span> <span class="o">+</span> <span class="nb">bytes</span><span class="p">([</span><span class="n">OP_CHECKSIG</span><span class="p">])</span>
+
+
+<div class="viewcode-block" id="oxc_mainnet">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxc_mainnet">[docs]</a>
+<span class="k">def</span> <span class="nf">oxc_mainnet</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexCoin mainnet parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">210000</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>       <span class="c1"># 10 minutes</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>     <span class="c1"># 2 hours (12 blocks)</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">rule_change_activation_threshold</span><span class="o">=</span><span class="mi">1916</span><span class="p">,</span>
+        <span class="n">miner_confirmation_window</span><span class="o">=</span><span class="mi">2016</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexCoin&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0xCC</span><span class="p">,</span> <span class="mh">0xDB</span><span class="p">,</span> <span class="mh">0x5C</span><span class="p">,</span> <span class="mh">0x5F</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">25174</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70016</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">76</span><span class="p">]),</span>     <span class="c1"># &#39;X&#39; prefix</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">75</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">203</span><span class="p">]),</span>
+        <span class="n">ext_pubkey_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x04</span><span class="p">,</span> <span class="mh">0x88</span><span class="p">,</span> <span class="mh">0xB2</span><span class="p">,</span> <span class="mh">0x1E</span><span class="p">]),</span>
+        <span class="n">ext_secret_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x04</span><span class="p">,</span> <span class="mh">0x88</span><span class="p">,</span> <span class="mh">0xAD</span><span class="p">,</span> <span class="mh">0xE4</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;oxc&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706241753</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">547178</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x1e0ffff0</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">20</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxc_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;0000041a7dc7fc92b0aa0c21ffefea5d2e40bcb94a1c03ee975027a44e7f4dab&quot;</span><span class="p">,</span>
+        <span class="n">dns_seeds</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="oxc_testnet">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxc_testnet">[docs]</a>
+<span class="k">def</span> <span class="nf">oxc_testnet</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexCoin testnet parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">210000</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexCoin Testnet&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x09</span><span class="p">,</span> <span class="mh">0xEC</span><span class="p">,</span> <span class="mh">0x4A</span><span class="p">,</span> <span class="mh">0xE2</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">35174</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70016</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">111</span><span class="p">]),</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">196</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">239</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;toxc&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706241753</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">547178</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x1e0ffff0</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">20</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxc_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;09f6fef8c7d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0fa&quot;</span><span class="p">,</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="oxc_regtest">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxc_regtest">[docs]</a>
+<span class="k">def</span> <span class="nf">oxc_regtest</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexCoin regtest parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexCoin Regtest&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;regtest&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x09</span><span class="p">,</span> <span class="mh">0xEC</span><span class="p">,</span> <span class="mh">0x4A</span><span class="p">,</span> <span class="mh">0xE2</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">45174</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70016</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">111</span><span class="p">]),</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">196</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">239</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;rtorc&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706241753</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x207fffff</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">20</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxc_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;0f9188f13cb7b15cbfdc235421e4d23861de2f60875228bf2d3b4dae1a0e3cfd&quot;</span><span class="p">,</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># OrdexGold (OXG) Chain Parameters</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_oxg_genesis_output_script</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The genesis coinbase output script pubkey for OXG.&quot;&quot;&quot;</span>
+    <span class="n">pubkey</span> <span class="o">=</span> <span class="nb">bytes</span><span class="o">.</span><span class="n">fromhex</span><span class="p">(</span>
+        <span class="s2">&quot;040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b&quot;</span>
+        <span class="s2">&quot;10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9&quot;</span>
+    <span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">ordex.core.script</span> <span class="kn">import</span> <span class="n">OP_CHECKSIG</span>
+    <span class="k">return</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">65</span><span class="p">])</span> <span class="o">+</span> <span class="n">pubkey</span> <span class="o">+</span> <span class="nb">bytes</span><span class="p">([</span><span class="n">OP_CHECKSIG</span><span class="p">])</span>
+
+
+<div class="viewcode-block" id="oxg_mainnet">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxg_mainnet">[docs]</a>
+<span class="k">def</span> <span class="nf">oxg_mainnet</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexGold mainnet parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">239000</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>       <span class="c1"># 10 minutes</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>     <span class="c1"># 2 hours (12 blocks)</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">rule_change_activation_threshold</span><span class="o">=</span><span class="mi">6048</span><span class="p">,</span>
+        <span class="n">miner_confirmation_window</span><span class="o">=</span><span class="mi">8064</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexGold&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xA0</span><span class="p">,</span> <span class="mh">0x22</span><span class="p">,</span> <span class="mh">0xB6</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">25466</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70017</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">39</span><span class="p">]),</span>     <span class="c1"># &#39;G&#39; prefix</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">5</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">166</span><span class="p">]),</span>
+        <span class="n">ext_pubkey_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x04</span><span class="p">,</span> <span class="mh">0x88</span><span class="p">,</span> <span class="mh">0xB2</span><span class="p">,</span> <span class="mh">0x1E</span><span class="p">]),</span>
+        <span class="n">ext_secret_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0x04</span><span class="p">,</span> <span class="mh">0x88</span><span class="p">,</span> <span class="mh">0xAD</span><span class="p">,</span> <span class="mh">0xE4</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;oxg&quot;</span><span class="p">,</span>
+        <span class="n">mweb_hrp</span><span class="o">=</span><span class="s2">&quot;oxgmweb&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706364693</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">1135400</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x1e0ffff0</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxg_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;fe6292b96f50e25d6c08b8c2dc2e9009c8bb45ff19d4b8e91b3f4a72bc77c8bf&quot;</span><span class="p">,</span>
+        <span class="n">dns_seeds</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="oxg_testnet">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxg_testnet">[docs]</a>
+<span class="k">def</span> <span class="nf">oxg_testnet</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexGold testnet parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">239000</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexGold Testnet&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0xC0</span><span class="p">,</span> <span class="mh">0x46</span><span class="p">,</span> <span class="mh">0x1F</span><span class="p">,</span> <span class="mh">0xB0</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">35466</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70017</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">111</span><span class="p">]),</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">196</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">239</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;toxg&quot;</span><span class="p">,</span>
+        <span class="n">mweb_hrp</span><span class="o">=</span><span class="s2">&quot;tmweb&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706364693</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">575050</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x1e0ffff0</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxg_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;a4b7f1d4e3c8b7f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a90a&quot;</span><span class="p">,</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="oxg_regtest">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.oxg_regtest">[docs]</a>
+<span class="k">def</span> <span class="nf">oxg_regtest</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OrdexGold regtest parameters.&quot;&quot;&quot;</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">ConsensusParams</span><span class="p">(</span>
+        <span class="n">subsidy_halving_interval</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span>
+        <span class="n">bip16_height</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">bip34_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip65_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">bip66_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">csv_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">segwit_height</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">pow_limit</span><span class="o">=</span><span class="n">Uint256</span><span class="o">.</span><span class="n">from_hex</span><span class="p">(</span>
+            <span class="s2">&quot;7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff&quot;</span>
+        <span class="p">),</span>
+        <span class="n">pow_target_spacing</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+        <span class="n">pow_target_timespan</span><span class="o">=</span><span class="mi">7200</span><span class="p">,</span>
+        <span class="n">pow_allow_min_difficulty_blocks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">pow_no_retargeting</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_scrypt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">has_mweb</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ChainParams</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;OrdexGold Regtest&quot;</span><span class="p">,</span>
+        <span class="n">network_id</span><span class="o">=</span><span class="s2">&quot;regtest&quot;</span><span class="p">,</span>
+        <span class="n">consensus</span><span class="o">=</span><span class="n">consensus</span><span class="p">,</span>
+        <span class="n">message_start</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mh">0xFA</span><span class="p">,</span> <span class="mh">0xBF</span><span class="p">,</span> <span class="mh">0xB5</span><span class="p">,</span> <span class="mh">0xDA</span><span class="p">]),</span>
+        <span class="n">default_port</span><span class="o">=</span><span class="mi">45466</span><span class="p">,</span>
+        <span class="n">protocol_version</span><span class="o">=</span><span class="mi">70017</span><span class="p">,</span>
+        <span class="n">pubkey_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">111</span><span class="p">]),</span>
+        <span class="n">script_address_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">196</span><span class="p">]),</span>
+        <span class="n">secret_key_prefix</span><span class="o">=</span><span class="nb">bytes</span><span class="p">([</span><span class="mi">239</span><span class="p">]),</span>
+        <span class="n">bech32_hrp</span><span class="o">=</span><span class="s2">&quot;rtoxg&quot;</span><span class="p">,</span>
+        <span class="n">mweb_hrp</span><span class="o">=</span><span class="s2">&quot;tmweb&quot;</span><span class="p">,</span>
+        <span class="n">genesis_timestamp</span><span class="o">=</span><span class="s2">&quot;Memento Mori&quot;</span><span class="p">,</span>
+        <span class="n">genesis_time</span><span class="o">=</span><span class="mi">1706364693</span><span class="p">,</span>
+        <span class="n">genesis_nonce</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">genesis_bits</span><span class="o">=</span><span class="mh">0x207fffff</span><span class="p">,</span>
+        <span class="n">genesis_version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">genesis_reward</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="mi">100_000_000</span><span class="p">,</span>
+        <span class="n">genesis_output_script</span><span class="o">=</span><span class="n">_oxg_genesis_output_script</span><span class="p">(),</span>
+        <span class="n">genesis_block_hash</span><span class="o">=</span><span class="s2">&quot;1c5e3e4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b0a&quot;</span><span class="p">,</span>
+        <span class="n">coinbase_maturity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Registry lookup</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="n">_CHAIN_PARAMS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;oxc_main&quot;</span><span class="p">:</span> <span class="n">oxc_mainnet</span><span class="p">,</span>
+    <span class="s2">&quot;oxc_test&quot;</span><span class="p">:</span> <span class="n">oxc_testnet</span><span class="p">,</span>
+    <span class="s2">&quot;oxc_regtest&quot;</span><span class="p">:</span> <span class="n">oxc_regtest</span><span class="p">,</span>
+    <span class="s2">&quot;oxg_main&quot;</span><span class="p">:</span> <span class="n">oxg_mainnet</span><span class="p">,</span>
+    <span class="s2">&quot;oxg_test&quot;</span><span class="p">:</span> <span class="n">oxg_testnet</span><span class="p">,</span>
+    <span class="s2">&quot;oxg_regtest&quot;</span><span class="p">:</span> <span class="n">oxg_regtest</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="get_chain_params">
+<a class="viewcode-back" href="../../../api.html#ordex.chain.chainparams.get_chain_params">[docs]</a>
+<span class="k">def</span> <span class="nf">get_chain_params</span><span class="p">(</span><span class="n">chain_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChainParams</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Look up chain parameters by identifier.</span>
+
+<span class="sd">    Valid identifiers: oxc_main, oxc_test, oxc_regtest,</span>
+<span class="sd">                       oxg_main, oxg_test, oxg_regtest.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">factory</span> <span class="o">=</span> <span class="n">_CHAIN_PARAMS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">chain_id</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_CHAIN_PARAMS</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown chain: </span><span class="si">{</span><span class="n">chain_id</span><span class="si">!r}</span><span class="s2">. Valid: </span><span class="si">{</span><span class="n">valid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">factory</span><span class="p">()</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

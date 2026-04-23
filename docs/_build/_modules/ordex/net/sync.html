@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ordex.net.sync &#8212; Ordex Python Library  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for ordex.net.sync</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Block synchronization logic for P2P networking.</span>
+
+<span class="sd">Provides header download, block locator construction, and chain</span>
+<span class="sd">state management for initial block download (IBD).</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
+
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
+
+<span class="kn">from</span> <span class="nn">ordex.chain.chainparams</span> <span class="kn">import</span> <span class="n">ChainParams</span>
+<span class="kn">from</span> <span class="nn">ordex.core.hash</span> <span class="kn">import</span> <span class="n">sha256d</span>
+<span class="kn">from</span> <span class="nn">ordex.net.connection</span> <span class="kn">import</span> <span class="n">NodeConnection</span>
+<span class="kn">from</span> <span class="nn">ordex.net.messages</span> <span class="kn">import</span> <span class="n">MsgGetHeaders</span><span class="p">,</span> <span class="n">MsgHeaders</span><span class="p">,</span> <span class="n">MsgGetData</span><span class="p">,</span> <span class="n">MsgInv</span>
+<span class="kn">from</span> <span class="nn">ordex.net.protocol</span> <span class="kn">import</span> <span class="n">CInv</span><span class="p">,</span> <span class="n">InvType</span><span class="p">,</span> <span class="n">NetMsgType</span>
+<span class="kn">from</span> <span class="nn">ordex.primitives.block</span> <span class="kn">import</span> <span class="n">CBlockHeader</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ChainState">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.ChainState">[docs]</a>
+<span class="k">class</span> <span class="nc">ChainState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tracks the local chain state during sync.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">ChainParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="n">CBlockHeader</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">known_blocks</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tip</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="ChainState.add_header">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.ChainState.add_header">[docs]</a>
+    <span class="k">def</span> <span class="nf">add_header</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">CBlockHeader</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a header to the chain state.</span>
+
+<span class="sd">        Returns True if this is a new header.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">header_hash</span> <span class="o">=</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">header_hash</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="n">header_hash</span><span class="p">]</span> <span class="o">=</span> <span class="n">header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">known_blocks</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">header_hash</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_newer</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tip</span><span class="p">)):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="o">=</span> <span class="n">header_hash</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_is_newer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">CBlockHeader</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CBlockHeader</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">other</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">header</span><span class="o">.</span><span class="n">time</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">time</span>
+
+<div class="viewcode-block" id="ChainState.get_locator">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.ChainState.get_locator">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_locator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a block locator for getheaders message.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">]</span>
+
+        <span class="n">locator</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nb">hash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">hash</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+                <span class="n">locator</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">hash</span><span class="p">)</span>
+                <span class="n">header</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="nb">hash</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">header</span><span class="o">.</span><span class="n">hash_prev_block</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+                    <span class="nb">hash</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">hash_prev_block</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="n">locator</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">locator</span></div>
+
+
+<div class="viewcode-block" id="ChainState.find_gap">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.ChainState.find_gap">[docs]</a>
+    <span class="k">def</span> <span class="nf">find_gap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">headers</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CBlockHeader</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Find the first gap in the header chain.</span>
+
+<span class="sd">        Returns the index where the gap starts, or None if contiguous.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">headers</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">header</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span>
+            <span class="n">header_hash</span> <span class="o">=</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+            <span class="n">prev_hash</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">hash_prev_block</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">prev_hash</span> <span class="o">!=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span><span class="p">:</span>
+                    <span class="k">continue</span>
+            <span class="k">elif</span> <span class="n">prev_hash</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">known_blocks</span> <span class="ow">and</span> <span class="n">prev_hash</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">i</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="BlockSynchronizer">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.BlockSynchronizer">[docs]</a>
+<span class="k">class</span> <span class="nc">BlockSynchronizer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Handles header and block synchronization with peers.</span>
+
+<span class="sd">    Usage::</span>
+
+<span class="sd">        sync = BlockSynchronizer(conn, chain_params)</span>
+<span class="sd">        await sync.download_headers(peer_height=800000)</span>
+<span class="sd">        await sync.download_blocks()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">MAX_HEADERS_PER_MSG</span> <span class="o">=</span> <span class="mi">2000</span>
+    <span class="n">MAX_BLOCKS_PER_MSG</span> <span class="o">=</span> <span class="mi">16</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">:</span> <span class="n">NodeConnection</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ChainParams</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">conn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span> <span class="ow">or</span> <span class="n">conn</span><span class="o">.</span><span class="n">params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">ChainState</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BlockSynchronizer.download_headers">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.BlockSynchronizer.download_headers">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">download_headers</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">peer_height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">max_headers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2000</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">CBlockHeader</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Download block headers from peer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            peer_height: Known height of peer&#39;s chain tip</span>
+<span class="sd">            max_headers: Maximum headers to request</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of downloaded headers</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">downloaded</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CBlockHeader</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">locators</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_locator</span><span class="p">()</span>
+        <span class="n">hash_stop</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\x00</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="mi">32</span>
+
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">downloaded</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">max_headers</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">MsgGetHeaders</span><span class="p">(</span>
+                <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">protocol_version</span><span class="p">,</span>
+                <span class="n">block_locator_hashes</span><span class="o">=</span><span class="n">locators</span><span class="p">,</span>
+                <span class="n">hash_stop</span><span class="o">=</span><span class="n">hash_stop</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">NetMsgType</span><span class="o">.</span><span class="n">GETHEADERS</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+
+            <span class="n">cmd</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">recv_message</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">cmd</span> <span class="o">!=</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">HEADERS</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Expected headers, got </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">cmd</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="n">headers_msg</span> <span class="o">=</span> <span class="n">MsgHeaders</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">headers_msg</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No more headers available&quot;</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers_msg</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">add_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+                <span class="n">downloaded</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+
+            <span class="n">last_hash</span> <span class="o">=</span> <span class="n">sha256d</span><span class="p">(</span><span class="n">headers_msg</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+            <span class="n">locators</span> <span class="o">=</span> <span class="p">[</span><span class="n">last_hash</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">headers_msg</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_HEADERS_PER_MSG</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Downloaded </span><span class="si">%d</span><span class="s2"> headers&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">downloaded</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">downloaded</span></div>
+
+
+<div class="viewcode-block" id="BlockSynchronizer.request_block">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.BlockSynchronizer.request_block">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">request_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block_hash</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Request a specific block from the peer.</span>
+
+<span class="sd">        Returns the serialized block or None if not received.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">inv</span> <span class="o">=</span> <span class="n">CInv</span><span class="p">(</span><span class="n">InvType</span><span class="o">.</span><span class="n">MSG_BLOCK</span><span class="p">,</span> <span class="n">block_hash</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">MsgGetData</span><span class="p">(</span><span class="n">inventory</span><span class="o">=</span><span class="p">[</span><span class="n">inv</span><span class="p">])</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">NetMsgType</span><span class="o">.</span><span class="n">GETDATA</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">cmd</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">recv_message</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">payload</span>
+            <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">NOTFOUND</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Block not found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">block_hash</span><span class="o">.</span><span class="n">hex</span><span class="p">())</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Timeout waiting for block: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">block_hash</span><span class="o">.</span><span class="n">hex</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="BlockSynchronizer.download_blocks">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.BlockSynchronizer.download_blocks">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">download_blocks</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">start_hash</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_blocks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Download blocks starting from a given hash.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            start_hash: Hash to start from (default: tip)</span>
+<span class="sd">            max_blocks: Maximum blocks to download</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of serialized blocks</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">downloaded</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">if</span> <span class="n">start_hash</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">start_hash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tip</span>
+
+        <span class="k">if</span> <span class="n">start_hash</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No blocks to download (no tip)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">downloaded</span>
+
+        <span class="n">inv</span> <span class="o">=</span> <span class="n">CInv</span><span class="p">(</span><span class="n">InvType</span><span class="o">.</span><span class="n">MSG_BLOCK</span><span class="p">,</span> <span class="n">start_hash</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">MsgGetData</span><span class="p">(</span><span class="n">inventory</span><span class="o">=</span><span class="p">[</span><span class="n">inv</span><span class="p">])</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">NetMsgType</span><span class="o">.</span><span class="n">GETDATA</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">to_bytes</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_blocks</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cmd</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">recv_message</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">60.0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">BLOCK</span><span class="p">:</span>
+                    <span class="n">downloaded</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">INV</span><span class="p">:</span>
+                    <span class="n">inv_msg</span> <span class="o">=</span> <span class="n">MsgInv</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
+                    <span class="k">for</span> <span class="n">inv_item</span> <span class="ow">in</span> <span class="n">inv_msg</span><span class="o">.</span><span class="n">inventory</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">inv_item</span><span class="o">.</span><span class="n">is_block</span><span class="p">():</span>
+                            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">request_block</span><span class="p">(</span><span class="n">inv_item</span><span class="o">.</span><span class="n">hash</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">NOTFOUND</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Unexpected message during block download: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">cmd</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Downloaded </span><span class="si">%d</span><span class="s2"> blocks&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">downloaded</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">downloaded</span></div>
+
+
+<div class="viewcode-block" id="BlockSynchronizer.get_peer_inventory">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.BlockSynchronizer.get_peer_inventory">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_peer_inventory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">CInv</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Request mempool inventory from peer.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">NetMsgType</span><span class="o">.</span><span class="n">MEMP</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+        <span class="n">inv_items</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CInv</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">cmd</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">recv_message</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">INV</span><span class="p">:</span>
+                    <span class="n">inv_msg</span> <span class="o">=</span> <span class="n">MsgInv</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
+                    <span class="n">inv_items</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">inv_msg</span><span class="o">.</span><span class="n">inventory</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="n">NetMsgType</span><span class="o">.</span><span class="n">NOTFOUND</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">break</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">inv_items</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="PeerManager">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.PeerManager">[docs]</a>
+<span class="k">class</span> <span class="nc">PeerManager</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Manages connections to multiple peers and tracks their chain state.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">ChainParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NodeConnection</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_peer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="PeerManager.add_peer">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.PeerManager.add_peer">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">add_peer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Connect to a new peer and perform handshake.</span>
+
+<span class="sd">        Returns True if connection successful.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">conn</span> <span class="o">=</span> <span class="n">NodeConnection</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">handshake</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conn</span>
+
+            <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">peer_version</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">peer_version</span><span class="o">.</span><span class="n">start_height</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_best_peer</span><span class="p">()</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to peer </span><span class="si">%s</span><span class="s2">:</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to connect to </span><span class="si">%s</span><span class="s2">:</span><span class="si">%d</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_update_best_peer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_peer</span> <span class="o">=</span> <span class="n">best</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<div class="viewcode-block" id="PeerManager.disconnect_peer">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.PeerManager.disconnect_peer">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">disconnect_peer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Disconnect from a peer.&quot;&quot;&quot;</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="p">:</span>
+                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">best_peer</span> <span class="o">==</span> <span class="n">key</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">best_peer</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_best_peer</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="PeerManager.close_all">
+<a class="viewcode-back" href="../../../api.html#ordex.net.sync.PeerManager.close_all">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">close_all</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Close all peer connections.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">conn</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
+            <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connections</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">peer_heights</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_peer</span> <span class="o">=</span> <span class="kc">None</span></div>
+</div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Ordex Python Library</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Ordex.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
