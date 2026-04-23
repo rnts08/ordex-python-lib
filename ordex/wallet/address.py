@@ -12,6 +12,7 @@ from ordex.chain.chainparams import ChainParams
 from ordex.core.base58 import b58check_encode, b58check_decode, bech32_encode, bech32_decode
 from ordex.core.hash import hash160
 from ordex.core.key import PrivateKey, PublicKey
+from ordex.core.script import CScript
 
 
 def pubkey_to_p2pkh(pubkey: PublicKey, params: ChainParams) -> str:
@@ -145,14 +146,21 @@ def generate_keypair(params: ChainParams) -> Dict[str, Any]:
     - 'pubkey': PublicKey object
     - 'wif': WIF-encoded private key
     - 'p2pkh': P2PKH address
+    - 'p2sh': P2SH address (P2PKH-in-P2SH)
     - 'p2wpkh': Bech32 P2WPKH address
     """
     privkey = PrivateKey.generate()
     pubkey = privkey.public_key(compressed=True)
+    
+    # Create P2SH address from pubkey hash (P2PKH-in-P2SH)
+    p2pkh_script = CScript.p2pkh(pubkey.hash160())
+    p2sh_addr = script_to_p2sh(p2pkh_script, params)
+    
     return {
         "privkey": privkey,
         "pubkey": pubkey,
         "wif": privkey_to_wif(privkey, params),
         "p2pkh": pubkey_to_p2pkh(pubkey, params),
+        "p2sh": p2sh_addr,
         "p2wpkh": pubkey_to_bech32(pubkey, params),
     }

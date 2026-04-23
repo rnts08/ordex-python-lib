@@ -10,7 +10,9 @@ from ordex.core.key import PrivateKey, PublicKey
 from ordex.wallet.address import (
     pubkey_to_p2pkh, pubkey_to_bech32, privkey_to_wif, generate_keypair,
     p2pkh_to_pubkey_hash, bech32_to_pubkey_hash, decode_address,
+    script_to_p2sh, p2sh_to_script_hash,
 )
+from ordex.core.script import CScript
 
 
 class TestBase58:
@@ -128,9 +130,13 @@ class TestAddressGeneration:
         assert "pubkey" in kp
         assert "wif" in kp
         assert "p2pkh" in kp
+        assert "p2sh" in kp
         assert "p2wpkh" in kp
         assert kp["p2pkh"][0] == "X"
         assert kp["p2wpkh"].startswith("oxc1")
+        # Verify P2SH address
+        ver, payload = b58check_decode(kp["p2sh"])
+        assert ver == bytes([75])  # OXC script address prefix
 
     def test_generate_keypair_oxg(self):
         params = oxg_mainnet()
@@ -140,6 +146,9 @@ class TestAddressGeneration:
         ver, payload = b58check_decode(kp["p2pkh"])
         assert ver == bytes([39])
         assert kp["p2wpkh"].startswith("oxg1")
+        # Verify P2SH address
+        ver, payload = b58check_decode(kp["p2sh"])
+        assert ver == bytes([5])  # OXG script address prefix
 
 
 class TestAddressDecoding:
@@ -249,3 +258,31 @@ class TestAddressDecoding:
         hrp, witver, witprog = bech32_to_pubkey_hash(addr)
         # Verify
         assert witprog == pub.hash160()
+
+    def test_p2sh_roundtrip(self):
+        """Test P2SH address encoding and decoding."""
+        params = oxc_mainnet()
+        pk = PrivateKey.generate()
+        pub = pk.public_key()
+        
+        # Create P2PKH script and wrap in P2SH
+        p2pkh_script = CScript.p2pkh(pub.hash160())
+        p2sh_addr = script_to_p2sh(p2pkh_script, params)
+        
+        # Decode and verify
+        version, script_hash = p2sh_to_script_hash(p2sh_addr)
+        assert version == bytes([75])  # OXC script prefix
+        assert len(script_hash) == 20
+        
+    def test_generate_keypair_p2sh_decode(self):
+        """Test that generated P2SH addresses can be decoded correctly."""
+        params = oxc_mainnet()
+        kp = generate_keypair(params)
+        
+        # The P2SH is a hash of the P2PKH script
+        version, script_hash = p2sh_to_script_hash(kp["p2sh"])
+        
+        # Verify version matches
+        assert version == params.script_address_prefix
+        # Verify it's a 20-byte hash
+        assert len(script_hash) == 20
