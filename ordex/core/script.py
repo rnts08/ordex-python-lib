@@ -298,7 +298,7 @@ class ScriptInterpreter:
                         pubkey = PublicKey(pubkey_bytes)
                         privkey = PrivateKey(sig_bytes[:-1] if sig_bytes[-1] <= 4 else sig_bytes)
 
-                        message = self._get_sighash_message(sig_bytes)
+                        message = self._get_sighash_message(sig_bytes, self.script)
                         signature = sig_bytes[:-1]
 
                         privkey._key.sign_digest(message, sigencode=lambda r, s: r.to_bytes(32, 'big') + s.to_bytes(32, 'big'))
@@ -449,11 +449,22 @@ class ScriptInterpreter:
         except Exception:
             return False
 
-    def _get_sighash_message(self, sig_bytes: bytes) -> bytes:
-        """Get the message hash for signature verification."""
+    def _get_sighash_message(self, sig_bytes: bytes, script: CScript) -> bytes:
+        """Get the message hash for signature verification.
+
+        This is a simplified sighash implementation. Full BIP143 support would require
+        transaction context (nHashType, input index, amounts, etc.)
+        """
         if len(sig_bytes) < 1:
             return sha256d(b"")
-        return sha256d(b"TODO: implement sighash")
+
+        sighash_type = sig_bytes[-1] if sig_bytes else 0x01
+
+        base = bytes([sighash_type])
+        if script:
+            base += bytes(script)
+
+        return sha256d(base)
 
     def verify_p2pkh(
         self,
