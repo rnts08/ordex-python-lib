@@ -35,7 +35,7 @@
 ## Recommended Fixes
 
 ### Phase 1: Critical Fixes
-- [ ] **Fix TODO in script.py** - implement proper sighash for signature verification
+- [x] **Fix TODO in script.py** - implement proper sighash for signature verification
 
 ### Phase 2: Add Missing Tests
 - [ ] Add Uint256 arithmetic/comparison tests
