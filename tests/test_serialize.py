@@ -127,6 +127,23 @@ class TestUint256:
         assert a != b
         assert a == Uint256(100)
 
+    def test_subtraction(self):
+        """Test Uint256 subtraction."""
+        a = Uint256(100)
+        b = Uint256(30)
+        result = a - b
+        assert result == Uint256(70)
+
+    def test_subtraction_wrap(self):
+        """Test Uint256 subtraction wraps around."""
+        a = Uint256(30)
+        b = Uint256(100)
+        # Wraps around (unsigned)
+        result = a - b
+        # (30 - 100) & MAX
+        expected = (30 - 100) & ((1 << 256) - 1)
+        assert int(result) == expected
+
 
 class TestHash:
     """Cryptographic hash functions."""

@@ -6,7 +6,7 @@ Supports P2PKH, P2SH, Bech32 (P2WPKH), and WIF encoding.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 from ordex.chain.chainparams import ChainParams
 from ordex.core.base58 import b58check_encode, b58check_decode, bech32_encode, bech32_decode
@@ -86,7 +86,7 @@ def bech32_to_pubkey_hash(address: str) -> Tuple[str, int, bytes]:
     return hrp, witver, witprog
 
 
-def decode_address(address: str) -> dict:
+def decode_address(address: str) -> Dict[str, Any]:
     """Decode any address type and return a dict with details.
 
     Detects address type (P2PKH, P2SH, Bech32) and decodes accordingly.
@@ -137,7 +137,7 @@ def privkey_to_wif(privkey: PrivateKey, params: ChainParams, compressed: bool = 
     )
 
 
-def generate_keypair(params: ChainParams):
+def generate_keypair(params: ChainParams) -> Dict[str, Any]:
     """Generate a new keypair and return (private_key, public_key, addresses).
 
     Returns a dict with:

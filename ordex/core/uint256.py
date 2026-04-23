@@ -133,6 +133,11 @@ class Uint256:
         ov = other._value if isinstance(other, Uint256) else other
         return Uint256((self._value + ov) & self.MAX)
 
+    def __sub__(self, other: "Uint256") -> "Uint256":
+        """Subtract another value. Result wraps around (unsigned)."""
+        ov = other._value if isinstance(other, Uint256) else other
+        return Uint256((self._value - ov) & self.MAX)
+
     # -- Comparison ---------------------------------------------------------
 
     def __eq__(self, other: object) -> bool:
