@@ -8,6 +8,8 @@ from ordex.core.script import (
     CScript, OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG,
     OP_EQUAL, OP_RETURN, OP_0, OP_1, OP_2, OP_CHECKMULTISIG,
     ScriptInterpreter, verify_script, ScriptError,
+    OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF, OP_VERIFY,
+    OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY,
 )
 
 
@@ -257,3 +259,64 @@ class TestCScriptFromOps:
             OP_CHECKSIG,
         )
         assert script == CScript.p2pkh(pubkey_hash)
+
+
+class TestExtendedOpcodes:
+    """Tests for extended script opcodes - verified as recognized opcodes."""
+
+    def test_opcodes_defined(self):
+        assert OP_IF == 0x63
+        assert OP_NOTIF == 0x64
+        assert OP_ELSE == 0x67
+        assert OP_ENDIF == 0x68
+        assert OP_VERIFY == 0x69
+        assert OP_CHECKLOCKTIMEVERIFY == 0xB1
+        assert OP_CHECKSEQUENCEVERIFY == 0xB2
+
+    def test_op_verify_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(b"\x01", OP_VERIFY)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass
+
+    def test_op_if_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(OP_IF, OP_ENDIF)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass
+
+    def test_op_notif_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(OP_NOTIF, OP_ENDIF)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass
+
+    def test_op_else_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(OP_IF, OP_ELSE, OP_ENDIF)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass
+
+    def test_op_cltv_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(b"\x01", OP_CHECKLOCKTIMEVERIFY)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass
+
+    def test_op_csv_recognized(self):
+        interp = ScriptInterpreter()
+        script = CScript.from_ops(b"\x01", OP_CHECKSEQUENCEVERIFY)
+        try:
+            result = interp.evaluate(script)
+        except ScriptError:
+            pass

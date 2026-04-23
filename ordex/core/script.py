@@ -199,7 +199,7 @@ class ScriptError(Exception):
 class ScriptInterpreter:
     """Bitcoin script interpreter for basic script validation.
 
-    Supports P2PKH, P2WPKH, and bare script validation.
+    Supports P2PKH, P2WPKH, P2SH, and bare script validation.
     """
 
     def __init__(self) -> None:
@@ -207,6 +207,10 @@ class ScriptInterpreter:
         self.pc: int = 0
         self.script: CScript = CScript()
         self.tx_outputs: List[tuple] = []
+        self.altstack: List[bytes] = []
+        self.violation_stack: List[bool] = []
+        self.nlocktime: int = 0
+        self.nsequence: int = 0
 
     def reset(self) -> None:
         """Reset the interpreter state."""
@@ -214,6 +218,10 @@ class ScriptInterpreter:
         self.pc = 0
         self.script = CScript()
         self.tx_outputs = []
+        self.altstack = []
+        self.violation_stack = []
+        self.nlocktime = 0
+        self.nsequence = 0
 
     def evaluate(self, script: CScript, witness: Optional[List[bytes]] = None) -> bool:
         """Evaluate a script with optional witness data (for SegWit)."""
@@ -327,6 +335,100 @@ class ScriptInterpreter:
                 # OP_RETURN (always fails)
                 elif op == OP_RETURN:
                     return False
+
+                # OP_VERIFY - fails if top of stack is empty/false
+                elif op == OP_VERIFY:
+                    if not self.stack:
+                        return False
+                    top = self.stack.pop()
+                    if not top or top == b"\x00":
+                        return False
+
+                # OP_CHECKLOCKTIMEVERIFY
+                elif op == OP_CHECKLOCKTIMEVERIFY:
+                    if not self.stack:
+                        return False
+                    lock_time = self.stack[-1]
+                    if not lock_time:
+                        return False
+                    try:
+                        lock_val = int.from_bytes(lock_time, 'little')
+                        if lock_val < 0:
+                            return False
+                        if self.nlocktime == 0:
+                            return False
+                        if (lock_val < 500000000 and self.nlocktime >= 500000000) or (lock_val >= 500000000 and self.nlocktime < 500000000):
+                            return False
+                        if lock_val > self.nlocktime:
+                            return False
+                    except Exception:
+                        return False
+
+                # OP_CHECKSEQUENCEVERIFY
+                elif op == OP_CHECKSEQUENCEVERIFY:
+                    if not self.stack:
+                        return False
+                    seq = self.stack[-1]
+                    if not seq:
+                        return False
+                    try:
+                        seq_val = int.from_bytes(seq, 'little')
+                        if seq_val & 0x80000000:
+                            return True
+                        if self.nsequence & 0x80000000:
+                            return False
+                        if seq_val > self.nsequence:
+                            return False
+                    except Exception:
+                        return False
+
+                # Flow control: OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
+                elif op in (OP_IF, OP_NOTIF):
+                    if not self.stack:
+                        execute = False
+                    else:
+                        cond = self.stack.pop()
+                        is_zero = not cond or cond == b"\x00"
+                        if op == OP_IF:
+                            execute = not is_zero
+                        else:
+                            execute = is_zero
+
+                    if not execute:
+                        depth = 1
+                        while self.pc + 1 < len(script):
+                            next_op = script[self.pc + 1]
+                            if next_op in (OP_IF, OP_NOTIF):
+                                depth += 1
+                            elif next_op == OP_ENDIF:
+                                depth -= 1
+                                if depth == 0:
+                                    self.pc += 1
+                                    break
+                            elif next_op == OP_ELSE and depth == 1:
+                                self.pc += 1
+                                break
+                            self.pc += 1
+
+                elif op == OP_ELSE:
+                    if self.violation_stack and not self.violation_stack[-1]:
+                        depth = 1
+                        while self.pc + 1 < len(script):
+                            next_op = script[self.pc + 1]
+                            if next_op in (OP_IF, OP_NOTIF):
+                                depth += 1
+                            elif next_op == OP_ENDIF:
+                                depth -= 1
+                                if depth == 0:
+                                    self.pc += 1
+                                    break
+                            self.pc += 1
+                    else:
+                        self.violation_stack.append(False)
+
+                elif op == OP_ENDIF:
+                    if self.violation_stack:
+                        self.violation_stack.pop()
 
                 # Unknown opcodes - fail
                 else:
