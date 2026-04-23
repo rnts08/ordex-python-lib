@@ -74,6 +74,26 @@ print(f"Address: {addr['p2pkh']}")
 print(f"Path: {addr['path']}")  # m/44'/0'/0'/0/0
 ```
 
+### Transaction Signing
+
+```python
+from ordex.wallet.signing import create_signed_transaction
+from ordex.core.key import PrivateKey
+
+# Create and sign a transaction
+privkey = PrivateKey.generate()
+
+inputs = [
+    ('0000...0000', 0, 100000000),  # (prevout_hash, prevout_index, amount)
+]
+outputs = [
+    ('Xu9T...nQw', 50000000),  # (address, amount in satoshis)
+]
+
+tx = create_signed_transaction(inputs, outputs, privkey)
+print(f"Signed txid: {tx.txid().hex()}")
+```
+
 ### RPC Client
 
 ```python
@@ -161,7 +181,7 @@ pytest tests/test_hd.py -v
 pytest tests/ --cov=ordex
 ```
 
-**Test Status**: 248 tests passing
+**Test Status**: 339 tests passing
 
 ## Support
 
