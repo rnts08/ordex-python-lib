@@ -11,11 +11,12 @@ Clean-room Python implementation of the **OrdexCoin (OXC)** and **OrdexGold (OXG
 - **Multi-chain support**: Single library handles both OXC (SHA-256d) and OXG (Scrypt + MWEB)
 - **Full primitive types**: Block headers, transactions, scripts, and serialization
 - **Consensus rules**: PoW validation, difficulty retargeting, block subsidy
-- **Address generation**: P2PKH, P2SH, Bech32 (P2WPKH) with correct chain prefixes
+- **Address generation**: P2PKH, P2SH, Bech32 (P2WPKH), P2TR (Taproot) with correct chain prefixes
 - **HD Wallet**: BIP32 hierarchical deterministic keys, BIP39 mnemonic support
 - **Transaction signing**: ECDSA transaction signing for P2PKH inputs
 - **Script interpreter**: Basic script validation for P2PKH, P2WPKH
 - **Block validation**: PoW and merkle root verification
+- **Fee estimation**: Local fee estimation with RPC fallback
 - **P2P networking**: Async TCP connection, header/block sync, multi-peer management
 - **RPC client**: JSON-RPC interface to ordexcoind / ordexgoldd
 
@@ -160,7 +161,7 @@ pytest tests/test_hd.py -v
 pytest tests/ --cov=ordex
 ```
 
-**Test Status**: 205 tests passing
+**Test Status**: 248 tests passing
 
 ## Support
 
