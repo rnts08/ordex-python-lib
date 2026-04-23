@@ -98,8 +98,11 @@ class TestAddressGeneration:
         pk = PrivateKey.generate()
         pub = pk.public_key()
         addr = pubkey_to_p2pkh(pub, params)
-        # OXG mainnet P2PKH starts with 'G' (version 39)
-        assert addr[0] == "G"
+        # OXG mainnet P2PKH uses version 39 (0x27)
+        # Verify by decoding - should match params.pubkey_address_prefix
+        from ordex.core.base58 import b58check_decode
+        ver, payload = b58check_decode(addr)
+        assert ver == bytes([39])
 
     def test_oxc_bech32_prefix(self):
         params = oxc_mainnet()
