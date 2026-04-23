@@ -165,6 +165,7 @@ def oxc_testnet() -> ChainParams:
         genesis_version=1,
         genesis_reward=20 * 100_000_000,
         genesis_output_script=_oxc_genesis_output_script(),
+        genesis_block_hash="09f6fef8c7d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0fa",
         coinbase_maturity=100,
     )
 
@@ -208,6 +209,7 @@ def oxc_regtest() -> ChainParams:
         genesis_version=1,
         genesis_reward=20 * 100_000_000,
         genesis_output_script=_oxc_genesis_output_script(),
+        genesis_block_hash="0f9188f13cb7b15cbfdc235421e4d23861de2f60875228bf2d3b4dae1a0e3cfd",
         coinbase_maturity=100,
     )
 
@@ -316,6 +318,7 @@ def oxg_testnet() -> ChainParams:
         genesis_version=1,
         genesis_reward=2 * 100_000_000,
         genesis_output_script=_oxg_genesis_output_script(),
+        genesis_block_hash="a4b7f1d4e3c8b7f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a90a",
         coinbase_maturity=100,
     )
 
@@ -360,6 +363,7 @@ def oxg_regtest() -> ChainParams:
         genesis_version=1,
         genesis_reward=2 * 100_000_000,
         genesis_output_script=_oxg_genesis_output_script(),
+        genesis_block_hash="1c5e3e4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b0a",
         coinbase_maturity=100,
     )
 
