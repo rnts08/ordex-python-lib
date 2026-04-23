@@ -1,5 +1,9 @@
 # Ordex Protocol — Python Implementation
 
+[![Tests](https://github.com/rnts08/ordex-python-lib/actions/workflows/tests.yml/badge.svg)](https://github.com/rnts08/ordex-python-lib/actions/workflows/tests.yml)
+[![Python Version](https://img.shields.io/pypi/pyversions/ordex)](https://pypi.org/project/ordex/)
+[![License](https://img.shields.io/github/license/rnts08/ordex-python-lib)](LICENSE.md)
+
 Clean-room Python implementation of the **OrdexCoin (OXC)** and **OrdexGold (OXG)** blockchain protocols.
 
 ## Features
@@ -10,6 +14,8 @@ Clean-room Python implementation of the **OrdexCoin (OXC)** and **OrdexGold (OXG
 - **Address generation**: P2PKH, P2SH, Bech32 (P2WPKH) with correct chain prefixes
 - **HD Wallet**: BIP32 hierarchical deterministic keys, BIP39 mnemonic support
 - **Transaction signing**: ECDSA transaction signing for P2PKH inputs
+- **Script interpreter**: Basic script validation for P2PKH, P2WPKH
+- **Block validation**: PoW and merkle root verification
 - **P2P networking**: Async TCP connection, header/block sync, multi-peer management
 - **RPC client**: JSON-RPC interface to ordexcoind / ordexgoldd
 
@@ -154,7 +160,7 @@ pytest tests/test_hd.py -v
 pytest tests/ --cov=ordex
 ```
 
-**Test Status**: 159 tests passing
+**Test Status**: 205 tests passing
 
 ## Support
 
