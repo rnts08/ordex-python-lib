@@ -32,20 +32,22 @@ def setup_logging(verbose: bool = False) -> None:
 
 def start_command(args: argparse.Namespace) -> int:
     """Start the RPC server."""
-    config = load_config(network=args.network)
-    config.daemon = args.daemon
-    config.verbose = args.verbose
-
-    if args.port:
-        config.rpc_port = args.port
-
+    from ordex.rpc.daemon import run_daemon_loop, run_dual_daemon
+    
     setup_logging(args.verbose)
-    logger.info(f"Starting Ordex RPC server for {args.network or config.network}")
+    
+    if args.dual:
+        print("Starting dual daemon (OrdexCoin + OrdexGold)...")
+        run_dual_daemon(oxc_port=args.port, oxg_port=args.oxg_port)
+    elif args.network == "all":
+        print("Starting all networks (OrdexCoin + OrdexGold)...")
+        run_dual_daemon(oxc_port=args.port, oxg_port=args.oxg_port)
+    else:
+        network = args.network or "ordexcoin"
+        port = args.port or NETWORK_PORTS.get(network, {}).get("rpc", 8332)
+        print(f"Starting Ordex RPC daemon for {network} on port {port}")
+        run_daemon_loop(network, port)
 
-    config_path = get_default_config_path()
-    config.save(config_path)
-
-    print(f"Ordex RPC server started on {config.get_node_url()}")
     return 0
 
 
@@ -398,8 +400,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     # start command
     start_parser = subparsers.add_parser("start", help="Start RPC server")
-    start_parser.add_argument("--daemon", action="store_true", help="Run as daemon")
-    start_parser.add_argument("--port", type=int, help="Port to listen on")
+    start_parser.add_argument("--network", "-n", choices=["ordexcoin", "ordexgold", "all"],
+                              help="Network to run (default: ordexcoin)")
+    start_parser.add_argument("--port", type=int, help="Port for primary network")
+    start_parser.add_argument("--oxg-port", type=int, help="Port for OrdexGold (dual mode)")
+    start_parser.add_argument("--dual", "-d", action="store_true",
+                              help="Run both OrdexCoin and OrdexGold in parallel")
 
     # stop command
     stop_parser = subparsers.add_parser("stop", help="Stop RPC server")
