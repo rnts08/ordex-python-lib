@@ -25,3 +25,5 @@ htmlcov/
 *.swp
 *.swo
 *~
+dist/
+*.egg-info/
