@@ -2,10 +2,19 @@
 
 ## Overview
 
-Python library for multi-wallet, multi-coin platform supporting OrdexCoin (OXC) and OrdexGold (OXG). Can be used as:
+Python library for multi-wallet, multi-coin platform supporting OrdexCoin (OXC) and OrdexGold (OXG).
 
-1. **Import library** - Import into Python projects
-2. **CLI daemon** - Run as standalone RPC server like bitcoind/ordexcoind
+**Important:** This is **NOT a full node**. It connects to existing `bitcoind`/`ordexcoind` nodes via JSON-RPC and provides an enhanced wallet and service layer on top. You need a running full node to use this library.
+
+---
+
+## Two Usage Modes
+
+### 1. Import Library
+Import into Python projects to access wallet services, fee estimation, transaction building, etc.
+
+### 2. CLI Daemon
+Run as a utility daemon that connects to node RPC - provides wallet commands and blockchain queries.
 
 ---
 
@@ -27,6 +36,18 @@ pip install -e .
 
 ## Quick Start
 
+### Prerequisites
+
+You need a running OrdexCoin or OrdexGold node with RPC enabled:
+
+```bash
+# ordexcoind.conf
+rpcuser=rpcuser
+rpcpassword=rpcpass
+rpcport=8332
+server=1
+```
+
 ### As Python Library
 
 ```python
@@ -35,28 +56,59 @@ from ordex.rpc import OrdexServices, create_services
 # Initialize with node config
 services = create_services([{
     "url": "http://localhost:8332",
-    "user": "rpcuser", 
+    "user": "rpcuser",
     "password": "rpcpass"
 }])
 
 # Use services
 fees = services.mempool.get_fees()
 tip = services.blocks.get_tip()
-print(f"Block height: {tip.height}")
+print(f"Block height: {tip.get('height')}")
 ```
 
 ### As CLI Daemon
 
 ```bash
-# Start RPC server for OrdexCoin
-ordex-rpc --network ordexcoin --port 8332
+# Start server for OrdexCoin
+ordex-rpc start --network ordexcoin
 
-# Start RPC server for OrdexGold  
-ordex-rpc --network ordexgold --port 19332
+# Start server for OrdexGold
+ordex-rpc start --network ordexgold
 
-# Start with both networks
-ordex-rpc --network all --port 8332
+# Run both networks in parallel (dual mode)
+ordex-rpc start --dual
 ```
+
+---
+
+## Architecture
+
+### Not a Full Node
+
+```
+┌─────────────────┐          ┌─────────────────────┐
+│  Your Service   │  ────►  │  Ordex RPC Library  │
+└─────────────────┘          └──────────┬──────────┘
+                                         │ RPC
+                                         ▼
+                              ┌─────────────────────┐
+                              │  bitcoind/ordexcoind │
+                              │  (Full Node Required) │
+                              └─────────────────────┘
+```
+
+The library provides:
+- **Enhanced wallet features** on top of node RPC
+- **Multi-wallet management** with HD derivation
+- **Fee estimation** with smart strategies
+- **Transaction tracking** and confirmation callbacks
+- **Event notifications** via webhooks
+
+The full node provides:
+- Blockchain data (blocks, transactions)
+- Mempool access
+- Transaction broadcasting
+- UTXO management
 
 ---
 
@@ -71,7 +123,7 @@ ordex-rpc --network all --port 8332
 - **Chain ID:** 86000
 
 ### OrdexGold (OXG)
-- **Symbol:** OXG  
+- **Symbol:** OXG
 - **Algorithm:** Scrypt PoW
 - **Block Time:** ~2.5 minutes
 - **Supply:** 1,001,000 OXG
@@ -85,24 +137,40 @@ ordex-rpc --network all --port 8332
 ### Service Architecture
 
 ```
-ordex/
-├── rpc/                      # RPC Services
-│   ├── network.py           # Multi-node management
-│   ├── health.py          # Health monitoring
-│   ├── mempool.py        # Mempool & fees
-│   ├── block.py         # Block data
-│   ├── address.py       # HD addresses
-│   ├── transaction.py  # Build/sign/broadcast
-│   ├── tracker.py     # Tx tracking
-│   ├── notifications.py # Events & webhooks
-│   ├── client.py     # Base RPC client
-│   └── services.py   # Unified container
-├── wallet/
-│   ├── utxo.py       # Wallet & UTXO management
-│   └── signing.py    # Transaction signing
-└── chain/
-    └── chainparams.py # Network parameters
+ordex/rpc/                    # RPC Service Layer
+├── network.py              # Multi-node management, failover
+├── health.py              # Health monitoring, metrics
+├── mempool.py            # Mempool & fee estimation
+├── block.py             # Block data retrieval, caching
+├── address.py          # HD address generation, validation
+├── transaction.py     # Transaction building, signing
+├── tracker.py        # Transaction tracking, confirmations
+├── notifications.py  # Webhooks, event system
+├── client.py        # Base JSON-RPC client
+├── services.py     # Unified service container
+├── daemon.py      # Background daemon management
+└── config.py     # Configuration management
+
+ordex/wallet/              # Base Wallet Layer
+├── utxo.py              # Wallet, UTXO management
+└── signing.py           # Transaction signing
+
+ordex/chain/              # Chain Configuration
+└── chainparams.py       # Network parameters (OXC/OXG)
 ```
+
+### Services Explained
+
+| Service | Purpose | Depends On |
+|---------|---------|------------|
+| Network | Multi-node RPC, failover | None |
+| Health | System health, metrics | Network |
+| Mempool | Fee estimation, mempool | Network |
+| Block | Block data, headers | Network |
+| Address | HD derivation, validation | Mempool |
+| Transaction | Build/sign/broadcast | Network, Address |
+| Tracker | Track txs, confirmations | Block |
+| Notifications | Events, webhooks | All services |
 
 ---
 
@@ -134,7 +202,6 @@ status = monitor.check()
 if not status.healthy:
     print(f"System degraded: {status.message}")
 
-# Get metrics
 summary = monitor.get_metrics_summary("rpc_latency")
 print(f"P95: {summary.p95_latency_ms}ms")
 ```
@@ -146,11 +213,9 @@ from ordex.rpc.mempool import MempoolService, FeeEstimateMode
 
 mempool = MempoolService(rpc_client=client)
 
-# Get fee estimates
 fees = mempool.get_fees(FeeEstimateMode.ECONOMIC)
 print(f"Fee: {fees.feerate} sat/vB")
 
-# Monitor mempool
 stats = mempool.get_stats()
 print(f"Mempool: {stats.transaction_count} txs")
 ```
@@ -162,11 +227,9 @@ from ordex.rpc.block import BlockService
 
 blocks = BlockService(rpc_client=client)
 
-# Get latest block
 tip = blocks.get_tip()
-print(f"Height: {tip.height}, Hash: {tip.hash}")
+print(f"Height: {tip.get('height')}, Hash: {tip.get('hash')}")
 
-# Subscribe to new blocks
 blocks.on_new_block(lambda header: print(f"New block: {header.height}"))
 ```
 
@@ -177,11 +240,9 @@ from ordex.rpc.address import AddressService, DerivationPath, ChainType
 
 address_svc = AddressService(rpc_client=client)
 
-# Generate BIP84 addresses
 addresses = address_svc.generate("wallet1", count=10, derivation=DerivationPath.BIP84)
 print(addresses)
 
-# Validate address
 if address_svc.validate("bc1q..."):
     print("Valid")
 ```
@@ -194,7 +255,6 @@ from ordex.rpc.transaction import TransactionService, TransactionBuilder
 tx_svc = TransactionService(rpc_client=client)
 builder = TransactionBuilder()
 
-# Build transaction
 builder.set_fee_rate(15.0)
 builder.add_input("prev_txid", 0, 100000)
 builder.add_output("dest_addr", 80000)
@@ -213,14 +273,11 @@ from ordex.rpc.tracker import TxTracker
 
 tracker = TxTracker(rpc_client=client)
 
-# Track transaction
 tracker.track("txid", "wallet1", 50000, fee=1000)
 
-# Get confirmations
 confirmations = tracker.get_confirmations("txid")
 print(f"Confirmations: {confirmations}")
 
-# Callback on confirmation
 tracker.on_confirmation(lambda txid, info: print(f"Confirmed: {txid}"))
 ```
 
@@ -231,10 +288,8 @@ from ordex.rpc.notifications import NotificationService, EventType
 
 notifs = NotificationService()
 
-# Register event handler
 notifs.register(EventType.TX_NEW.value, lambda e: print(f"New tx: {e.data}"))
 
-# Or add webhook
 notifs.add_webhook(
     "https://my-server.com/webhook",
     events=["tx.new", "tx.confirmed"],
@@ -260,16 +315,12 @@ config = OrdexConfig(
 services = OrdexServices(config)
 services.initialize()
 
-# All services available via properties
 mempool = services.mempool
 blocks = services.blocks
 transactions = services.transactions
 tracker = services.tracker
 
-# Health check
 health = services.check_health()
-
-# Statistics
 stats = services.get_stats()
 print(stats)
 ```
@@ -278,68 +329,48 @@ print(stats)
 
 ## CLI Daemon Usage
 
-### Start RPC Server
+### Start Server
 
 ```bash
-# OrdexCoin on default port
+# OrdexCoin only
 ordex-rpc start --network ordexcoin
 
-# OrdexGold with custom port
+# OrdexGold only
 ordex-rpc start --network ordexgold --port 19332
 
-# Both networks
+# Both networks in parallel
+ordex-rpc start --dual
 ordex-rpc start --network all
+
+# Custom ports for dual mode
+ordex-rpc start --dual --port 9032 --oxg-port 19332
 ```
 
 ### Wallet Commands
 
 ```bash
-# Create wallet
 ordex-rpc wallet create my_wallet
-
-# List wallets
 ordex-rpc wallet list
-
-# Get new address
 ordex-rpc wallet getnewaddress --wallet my_wallet
-
-# Get balance
 ordex-rpc wallet balance --wallet my_wallet
-
-# Send transaction
 ordex-rpc wallet send --wallet my_wallet --address <addr> --amount 1.0
 ```
 
 ### Blockchain Commands
 
-```python
-# Get blockchain info
+```bash
 ordex-rpc getblockchaininfo
-
-# Get block count
 ordex-rpc getblockcount
-
-# Get block by height
 ordex-rpc getblock 100000
-
-# Get mempool info
 ordex-rpc getmempoolinfo
-
-# Get fee estimates
-ordex-rpc estimatesmartfee 6
+ordex-rpc estimatesmartfee --half-hour
 ```
 
 ### Network Commands
 
 ```bash
-# Get network info
 ordex-rpc getnetworkinfo
-
-# Get peer info
 ordex-rpc getpeerinfo
-
-# Add node
-ordex-rpc addnode "10.0.0.1:8333" add
 ```
 
 ---
@@ -349,17 +380,10 @@ ordex-rpc addnode "10.0.0.1:8333" add
 ### Environment Variables
 
 ```bash
-# Default network
 export OXR_RPC_NETWORK=ordexcoin
-
-# RPC credentials
 export OXR_RPC_USER=rpcuser
 export OXR_RPC_PASSWORD=rpcpass
-
-# Data directory
 export OXR_DATA_DIR=~/.ordex
-
-# Log level
 export OXR_LOG_LEVEL=INFO
 ```
 
@@ -384,13 +408,8 @@ rpcpassword=rpcpass
 ## Testing
 
 ```bash
-# Run all tests
 python -m pytest
-
-# Run specific service tests
 python -m pytest tests/test_network.py -v
-
-# Coverage report
 python -m pytest --cov=ordex --cov-report=html
 ```
 
@@ -398,23 +417,25 @@ python -m pytest --cov=ordex --cov-report=html
 
 ## Version History
 
+### v1.1.1 (April 2026)
+- Dual network daemon support
+- `ordex-rpc start --dual` for parallel OXC/OXG
+- Daemon manager for multiple networks
+
 ### v1.1.0 (April 2026)
-- Added 8 RPC services + unified container
+- 8 RPC services + unified container
 - 598 total tests
-- Network Monitor with failover
-- Health Monitor with metrics
-- Mempool, Block, Address, Transaction services
+- Network Monitor, Health Monitor, Mempool, Block, Address, Transaction services
 - Tx Tracker, Notification Service
 - CLI daemon
 
 ### v1.0.0
 - Base library
-- UTXO management
-- Transaction signing
+- UTXO management, Transaction signing
 - 368 tests
 
 ---
 
 ## License
 
-MIT License
+See LICENSE.md for non-commercial use terms.
