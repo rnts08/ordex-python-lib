@@ -94,6 +94,54 @@ tx = create_signed_transaction(inputs, outputs, privkey)
 print(f"Signed txid: {tx.txid().hex()}")
 ```
 
+### UTXO Service (Ephemeral Wallet)
+
+```python
+from ordex.rpc.client import RpcClient
+from ordex.wallet.utxo import UTXO, CoinSelector, CoinSelectionStrategy
+
+rpc = RpcClient()
+
+# Get UTXOs from node
+result = rpc.listunspent(minconf=1)
+utxos = [UTXO.from_rpc(u) for u in result]
+
+# Select coins using greedy strategy
+selector = CoinSelector(strategy=CoinSelectionStrategy.GREEDY)
+result = selector.select(utxos, target_amount=50000000, fee_per_byte=1)
+
+print(f"Selected {len(result.utxos)} UTXOs")
+print(f"Total: {result.total_amount} satoshis")
+print(f"Fee: {result.fee} satoshis")
+```
+
+### Multi-Wallet Management
+
+```python
+from ordex.rpc.client import RpcClient
+from ordex.wallet.utxo import WalletManager, CoinSelectionStrategy
+from pathlib import Path
+
+rpc = RpcClient()
+
+# Create manager with persistent storage
+manager = WalletManager(rpc, storage_path=Path("./wallets"))
+
+# Create multiple wallets
+manager.create_wallet("Savings", "wallet_savings", addresses=["XvX26g..."])
+manager.create_wallet("Spending", "wallet_spending")
+
+# Generate addresses for spending wallet
+manager.generate_address("wallet_spending")
+
+# Sync and get stats
+stats = manager.sync_wallet("wallet_savings")
+print(stats.summary())
+
+# Full report
+print(manager.full_stats_report())
+```
+
 ### RPC Client
 
 ```python
@@ -181,7 +229,7 @@ pytest tests/test_hd.py -v
 pytest tests/ --cov=ordex
 ```
 
-**Test Status**: 339 tests passing
+**Test Status**: 368 tests passing
 
 ## Support
 
