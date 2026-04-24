@@ -1,0 +1,4 @@
+include README.md
+include LICENSE.md
+include bin/ordex-rpc
+recursive-include ordex *.py

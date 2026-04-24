@@ -6,4 +6,4 @@ Supports both chains:
   - OrdexGold: Litecoin fork, Scrypt PoW, MWEB support, 1.001M supply
 """
 
-__version__ = "0.1.0"
+__version__ = "1.1.0"

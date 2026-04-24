@@ -19,6 +19,8 @@ Clean-room Python implementation of the **OrdexCoin (OXC)** and **OrdexGold (OXG
 - **Fee estimation**: Local fee estimation with RPC fallback
 - **P2P networking**: Async TCP connection, header/block sync, multi-peer management
 - **RPC client**: JSON-RPC interface to ordexcoind / ordexgoldd
+- **RPC Services**: Network Monitor, Health Monitor, Mempool, Block, Address, Transaction, Tx Tracker, Notifications
+- **CLI Daemon**: `ordex-rpc` command-line tool for wallet and blockchain operations
 
 ## Quick Start
 
@@ -94,7 +96,38 @@ tx = create_signed_transaction(inputs, outputs, privkey)
 print(f"Signed txid: {tx.txid().hex()}")
 ```
 
-### UTXO Service (Ephemeral Wallet)
+### RPC Services (v1.1.0)
+
+```python
+from ordex.rpc import OrdexServices, create_services
+
+# Initialize all services
+services = create_services([{
+    "url": "http://localhost:8332",
+    "user": "rpcuser",
+    "password": "rpcpass"
+}])
+
+# Use services
+fees = services.mempool.get_fees()
+tip = services.blocks.get_tip()
+stats = services.get_stats()
+```
+
+### CLI Usage
+
+```bash
+# Start RPC server
+ordex-rpc start --network ordexcoin
+
+# Get blockchain info
+ordex-rpc getblockchaininfo
+
+# Wallet operations
+ordex-rpc wallet list
+ordex-rpc wallet create my_wallet
+ordex-rpc wallet getnewaddress my_wallet
+```
 
 ```python
 from ordex.rpc.client import RpcClient
@@ -229,7 +262,7 @@ pytest tests/test_hd.py -v
 pytest tests/ --cov=ordex
 ```
 
-**Test Status**: 368 tests passing
+**Test Status**: 598 tests passing
 
 ## Support
 
